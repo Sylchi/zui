@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.16
+        run: |
+          curl -fsSL https://ziglang.org/download/0.16.0/zig-linux-x86_64-0.16.0.tar.xz | tar xJ
+          echo "$PWD/zig-linux-x86_64-0.16.0" >> $GITHUB_PATH
+
+      - name: Build WASM (ReleaseSmall)
+        run: zig build wasm -Doptimize=ReleaseSmall
+
+      - name: Generate docs
+        run: zig build docs
+
+      - name: Copy artifacts
+        run: |
+          cp zig-out/bin/zui.wasm dist/zui.wasm
+          mkdir -p dist/docs
+          cp -r zig-out/docs/* dist/docs/
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zui-wasm
+          path: dist/zui.wasm
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zui-docs
+          path: dist/docs/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.16
+        run: |
+          curl -fsSL https://ziglang.org/download/0.16.0/zig-linux-x86_64-0.16.0.tar.xz | tar xJ
+          echo "$PWD/zig-linux-x86_64-0.16.0" >> $GITHUB_PATH
+
+      - name: Run tests
+        run: zig build test
+
+  publish-npm:
+    if: github.event_name == 'release'
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.16
+        run: |
+          curl -fsSL https://ziglang.org/download/0.16.0/zig-linux-x86_64-0.16.0.tar.xz | tar xJ
+          echo "$PWD/zig-linux-x86_64-0.16.0" >> $GITHUB_PATH
+
+      - name: Build WASM (ReleaseSmall)
+        run: |
+          zig build wasm -Doptimize=ReleaseSmall
+          cp zig-out/bin/zui.wasm dist/zui.wasm
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  deploy-docs:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zui-docs
+          path: docs/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,202 @@
+const std = @import("std");
+const clock = @import("../../clock.zig");
+const common = @import("../component_common.zig");
+const text_component = @import("Text.zig");
+const interaction = @import("../interaction.zig");
+const object = @import("../../object.zig");
+const ui = @import("../core.zig");
+const layout = @import("../layouts/Types.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const icon_component = @import("Icon.zig");
+const icon_pack = @import("../icon_pack.zig");
+const primitives = @import("../infra/Primitives.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+const renderControlFrame = primitives.renderControlFrame;
+const renderControlStateOverlay = primitives.renderControlStateOverlay;
+const renderControlText = primitives.renderControlText;
+const Icon = icon_component.Icon;
+const IconSlot = icon_component.IconSlot;
+
+pub const Input = struct {
+    id: u32,
+    placeholder: []const u8,
+    value: []const u8 = "",
+    default_value: []const u8 = "",
+    icon_slot: IconSlot = .none,
+    flags: common.ComponentFlags = .{},
+
+    pub fn node(self: Input) ui.Node {
+        return ui.inputDetailNode(self.id, self.placeholder, leadingIconTag(self.icon_slot));
+    }
+
+    pub fn accessibility(self: Input) common.Accessibility {
+        return .{ .role = .input, .label = self.placeholder, .control_id = self.id };
+    }
+
+    pub fn render(self: Input, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        const padding = inputPadding(options.control_size);
+        try renderControlFrame(scene, bounds, options.style.panel, options.style.border, primitives.control_radius);
+        try renderControlStateOverlay(scene, bounds, options, primitives.control_radius);
+        const text_bounds = if (leadingIcon(self.icon_slot)) |slot| with_icon: {
+            try slot.renderColor(scene, ui.Rect.init(bounds.x + padding, bounds.y + (bounds.h - input_icon_size) * 0.5, input_icon_size, input_icon_size), options.style.muted);
+            break :with_icon ui.Rect.init(bounds.x + padding + input_icon_size + input_icon_gap, bounds.y, @max(primitives.min_extent, bounds.w - padding * 2.0 - input_icon_size - input_icon_gap), bounds.h);
+        } else bounds;
+        const display_value = self.displayValue();
+        const display_color = if (self.value.len == 0 and self.default_value.len == 0) options.style.muted else options.style.text;
+        try renderControlText(scene, text_bounds, padding, primitives.control_label_height, display_value, display_color, .start);
+    }
+
+    pub fn collectInteractions(self: Input, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return common.collectHit(collector, bounds, .input, self.id);
+    }
+
+    pub fn measure(self: Input, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        const padding = inputPadding(options.control_size);
+        const icon_w = if (leadingIcon(self.icon_slot) != null) input_icon_size + input_icon_gap else 0.0;
+        const display_value = self.displayValue();
+        const label = text_component.Text.measureValue(display_value, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(display_value, primitives.control_label_height, input_label_max_lines));
+        const height = controlHeight(options.control_size);
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = label.preferred.w + padding * 2.0 + icon_w,
+            .h = @max(height, label.preferred.h + padding * 2.0),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(input_min_width, preferred.w), .h = @min(height, preferred.h) },
+            preferred,
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = @max(preferred.h, height) },
+        ).applyExact(constraints);
+    }
+
+    pub fn toObject(self: Input, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
+    }
+
+    pub fn writeRecord(self: Input, writer: *component_codec.Writer, index: usize) bool {
+        const placeholder_ref = writer.string(self.placeholder) orelse return false;
+        return writer.record(index, .input, self.id, placeholder_ref, .{ .offset = leadingIconTag(self.icon_slot), .len = 0 });
+    }
+
+    pub fn fromView(view: object.View) Error!Input {
+        return component_codec.decodeFromView(Input, .input, view);
+    }
+
+    pub fn fromNode(input: @FieldType(ui.Node, "input")) Error!Input {
+        return .{ .id = input.id, .placeholder = input.placeholder, .icon_slot = try IconSlot.fromTag(.leading, input.leading_icon) };
+    }
+
+    fn displayValue(self: Input) []const u8 {
+        if (self.value.len != 0) return self.value;
+        if (self.default_value.len != 0) return self.default_value;
+        return self.placeholder;
+    }
+};
+
+fn leadingIcon(slot: IconSlot) ?Icon {
+    return switch (slot) {
+        .none => null,
+        .leading => |value| value,
+        .trailing, .status, .media => null,
+    };
+}
+
+fn leadingIconTag(slot: IconSlot) u16 {
+    return common.optionalIconTag(if (leadingIcon(slot)) |value| value.value else null);
+}
+
+pub fn preferredSize(size: common.ControlSize) ui.Size {
+    return .{ .w = input_min_width, .h = controlHeight(size) };
+}
+
+fn controlHeight(size: common.ControlSize) f32 {
+    return switch (size) {
+        .small => 32.0,
+        .default => 40.0,
+        .large => 48.0,
+    };
+}
+
+fn inputPadding(size: common.ControlSize) f32 {
+    return switch (size) {
+        .small => 10.0,
+        .default => primitives.control_text_padding,
+        .large => 16.0,
+    };
+}
+
+const input_min_width: f32 = 44.0;
+const input_icon_size: f32 = 16.0;
+const input_icon_gap: f32 = 8.0;
+const input_label_max_lines: usize = 1;
+
+test "input component renders placeholder through shared control text" {
+    const input = Input{ .id = 10, .placeholder = "Search objects" };
+    var h = component_test.SceneHarness(8){};
+    h.init();
+
+    try h.render(input, ui.Rect.init(4, 8, 220, 40), .{});
+
+    const placeholder = component_test.textCommand(h.written(), "Search objects").?;
+    try std.testing.expectEqual(ui.Color.muted, placeholder.text.color);
+    try std.testing.expectEqual(@as(f32, 16.0), placeholder.text.origin.x);
+    try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.y);
+}
+
+test "input component renders leading icon as component state" {
+    const input = Input{ .id = 10, .placeholder = "Search objects", .icon_slot = IconSlot.named(.leading, .search) };
+    var h = component_test.SceneHarness(8){};
+    h.init();
+
+    try h.render(input, ui.Rect.init(4, 8, 220, 40), .{});
+
+    const placeholder = component_test.textCommand(h.written(), "Search objects").?;
+    try h.expectIcon(icon_pack.iconId(.search));
+    try std.testing.expectEqual(@as(f32, 52.0), placeholder.text.origin.x);
+}
+
+test "input component renders value instead of placeholder" {
+    const input = Input{ .id = 10, .placeholder = "Search objects", .value = "font", .icon_slot = IconSlot.named(.leading, .search) };
+    var h = component_test.SceneHarness(8){};
+    h.init();
+
+    try h.render(input, ui.Rect.init(4, 8, 220, 40), .{});
+
+    const value = component_test.textCommand(h.written(), "font").?;
+    try h.expectNoText("Search objects");
+    try std.testing.expectEqual(ui.Color.text, value.text.color);
+    try std.testing.expectEqual(@as(f32, 52.0), value.text.origin.x);
+}
+
+test "input component measurement respects at-most constraints" {
+    const input = Input{ .id = 10, .placeholder = "Search objects" };
+    const measured = input.measure(.{ .width = .{ .at_most = 96.0 }, .height = .{ .at_most = 32.0 } }, .{});
+
+    try std.testing.expectEqual(@as(f32, 96.0), measured.preferred.w);
+    try std.testing.expectEqual(@as(f32, 32.0), measured.preferred.h);
+}
+
+test "input component size variants adjust preferred height and padding" {
+    const input = Input{ .id = 10, .placeholder = "Search objects" };
+    const small = input.measure(.{}, .{ .control_size = .small });
+    const regular = input.measure(.{}, .{});
+    const large = input.measure(.{}, .{ .control_size = .large });
+    var h = component_test.SceneHarness(8){};
+    h.init();
+
+    try h.render(input, ui.Rect.init(4, 8, 220, 48), .{ .control_size = .large });
+
+    const placeholder = component_test.textCommand(h.written(), "Search objects").?;
+    try std.testing.expect(small.preferred.h < regular.preferred.h);
+    try std.testing.expect(large.preferred.h > regular.preferred.h);
+    try std.testing.expectEqual(@as(f32, 20.0), placeholder.text.origin.x);
+}
+
+test "input measurement follows placeholder text" {
+    const short = Input{ .id = 10, .placeholder = "IP" };
+    const long = Input{ .id = 10, .placeholder = "Search runtime authority receipts" };
+
+    try std.testing.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+}

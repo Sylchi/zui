@@ -1,0 +1,31 @@
+{
+  "name": "@edgerun/zui",
+  "version": "0.1.0",
+  "description": "Pure-Zig UI framework — components, layout, vector GPU pipeline. Compiles to WASM for cross-platform use.",
+  "keywords": ["zig", "ui", "gui", "wasm", "canvas", "components", "layout"],
+  "homepage": "https://github.com/edgerun-metal/zui",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/zui.mjs",
+  "types": "./dist/zui.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/zui.d.ts",
+      "import": "./dist/zui.mjs"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE",
+    "docs/"
+  ],
+  "scripts": {
+    "build": "zig build wasm && cp zig-out/bin/zui.wasm dist/",
+    "test": "zig build test",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

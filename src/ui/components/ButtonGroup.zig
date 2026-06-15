@@ -1,0 +1,104 @@
+const clock = @import("../../clock.zig");
+const common = @import("../component_common.zig");
+const text_component = @import("Text.zig");
+const interaction = @import("../interaction.zig");
+const object = @import("../../object.zig");
+const ui = @import("../core.zig");
+const layout = @import("../layouts/Types.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const list_layout = @import("../infra/ListLayout.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+pub const ButtonGroup = struct {
+    id: u32,
+    flags: common.ComponentFlags = .{},
+    first: []const u8,
+    second: []const u8,
+    active: u16 = 0,
+
+    pub fn node(self: ButtonGroup) ui.Node {
+        return ui.buttonGroupNode(self.id, self.first, self.second, list_layout.clampedIndex(self.active, group_item_count));
+    }
+
+    pub fn render(self: ButtonGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        const active = list_layout.clampedIndex(self.active, group_item_count);
+        try list_layout.renderSegment(scene, segmentBounds(bounds, 0), self.first, active == 0, segmentPaint(options));
+        try list_layout.renderSegment(scene, segmentBounds(bounds, 1), self.second, active == 1, segmentPaint(options));
+    }
+
+    pub fn collectInteractions(self: ButtonGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        try list_layout.collectEqualSegmentHits(collector, bounds, self.id, group_item_count);
+    }
+
+    pub fn measure(self: ButtonGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        const labels = [_][]const u8{ self.first, self.second };
+        return list_layout.measureSegments(&labels, constraints, .{
+            .item_count = @intCast(group_item_count),
+            .padding = toggle_text_padding,
+        });
+    }
+
+    pub fn toObject(self: ButtonGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
+    }
+
+    pub fn writeRecord(self: ButtonGroup, writer: *component_codec.Writer, index: usize) bool {
+        const first_ref = writer.string(self.first) orelse return false;
+        const second_ref = writer.string(self.second) orelse return false;
+        return writer.record(index, .button_group, list_layout.encodedIndexedId(self.id, self.active, group_item_count), first_ref, second_ref);
+    }
+
+    pub fn fromView(view: object.View) Error!ButtonGroup {
+        return component_codec.decodeFromView(ButtonGroup, .button_group, view);
+    }
+
+    pub fn fromNode(group: @FieldType(ui.Node, "button_group")) Error!ButtonGroup {
+        return .{ .id = group.id, .first = group.first, .second = group.second, .active = list_layout.clampedIndex(group.active, group_item_count) };
+    }
+};
+
+fn segmentPaint(options: RenderOptions) list_layout.SegmentPaint {
+    return .{
+        .active_fill = options.style.text,
+        .inactive_fill = options.style.panel,
+        .border = options.style.border,
+        .active_text = options.style.panel,
+        .inactive_text = options.style.text,
+        .padding = toggle_text_padding,
+    };
+}
+
+fn segmentBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    return list_layout.equalSegmentBounds(bounds, index, group_item_count);
+}
+
+const group_item_count: u16 = 2;
+const toggle_text_padding: f32 = 8.0;
+
+test "button group component renders segments and hit regions" {
+    const group = ButtonGroup{ .id = 90, .first = "Left", .second = "Right", .active = 1 };
+    var h = component_test.InteractiveHarness(16, 2){};
+    h.init();
+
+    try h.render(group, ui.Rect.init(0, 0, 160, 36), .{});
+    try group.collectInteractions(&h.collector, ui.Rect.init(0, 0, 160, 36));
+
+    try h.expectText("Left");
+    try h.expectText("Right");
+    try h.expectHitId(1, 91);
+}
+
+test "button group measurement follows segment labels" {
+    const short = ButtonGroup{ .id = 90, .first = "L", .second = "R", .active = 0 };
+    const long = ButtonGroup{ .id = 90, .first = "Runtime", .second = "Authority", .active = 0 };
+
+    const short_measured = short.measure(.{}, .{});
+    const long_measured = long.measure(.{}, .{});
+
+    try component_test.expect(short_measured.min.w < short_measured.preferred.w);
+    try component_test.expect(long_measured.preferred.w > short_measured.preferred.w);
+}

@@ -1,0 +1,109 @@
+const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
+const ui = @import("../core.zig");
+const text_component = @import("Text.zig");
+const button_component = @import("Button.zig");
+const icon_component = @import("Icon.zig");
+const icon = @import("../icon.zig");
+const layout = @import("../layouts/Types.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const component_primitives = @import("../infra/Primitives.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+const contentInset = component_primitives.contentInset;
+const IconButton = button_component.IconButton;
+
+pub const Carousel = struct {
+    id: u32,
+    flags: common.ComponentFlags = .{},
+    label: []const u8,
+
+    const serialization = component_codec.OneStringComponent(Carousel, "carousel", "label");
+
+    pub fn node(self: Carousel) ui.Node {
+        return ui.carouselNode(self.id, self.label);
+    }
+
+    pub fn render(self: Carousel, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        try carouselButton(self.id, "Previous slide", .chevron_left).render(scene, buttonBounds(bounds, 0), options);
+        const content = contentBounds(bounds);
+        try scene.pushRect(content, options.style.row, .fill, carousel_radius, 0.0);
+        if (contentInset(content, carousel_text_padding)) |inner| {
+            try text_component.Text.renderAligned(scene, inner.withHeightCentered(component_primitives.control_label_height), self.label, options.style.muted, .center);
+        }
+        try carouselButton(common.offsetId(self.id, 1), "Next slide", .chevron_right).render(scene, buttonBounds(bounds, 1), options);
+    }
+
+    pub fn collectInteractions(self: Carousel, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        try carouselButton(self.id, "Previous slide", .chevron_left).collectInteractions(collector, buttonBounds(bounds, 0));
+        try carouselButton(common.offsetId(self.id, 1), "Next slide", .chevron_right).collectInteractions(collector, buttonBounds(bounds, 1));
+    }
+
+    pub fn measure(self: Carousel, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        const label = text_component.Text.measureValue(self.label, .{ .width = .unconstrained, .text_wrap = .nowrap }, component_primitives.textMetrics(self.label, component_primitives.control_label_height, carousel_label_max_lines));
+        const preferred = component_primitives.constrainPreferredSize(.{
+            .w = carousel_button_size * 2.0 + carousel_gap * 2.0 + label.preferred.w + carousel_text_padding * 2.0,
+            .h = @max(carousel_button_size, label.preferred.h + carousel_text_padding * 2.0),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = carousel_button_size * 2.0 + carousel_gap * 2.0 + component_primitives.min_extent, .h = carousel_button_size },
+            preferred,
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
+        ).applyExact(constraints);
+    }
+
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
+
+    pub fn fromNode(carousel: @FieldType(ui.Node, "carousel")) Error!Carousel {
+        return .{ .id = carousel.id, .label = carousel.label };
+    }
+};
+
+fn carouselButton(id: u32, label: []const u8, icon_value: icon.Icon) IconButton {
+    return .{ .id = id, .label = label, .icon = icon_component.Icon.named(icon_value), .variant = .outline };
+}
+
+fn buttonBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    const y = bounds.y + (bounds.h - carousel_button_size) * 0.5;
+    return switch (index) {
+        0 => ui.Rect.init(bounds.x, y, carousel_button_size, carousel_button_size),
+        else => ui.Rect.init(bounds.x + bounds.w - carousel_button_size, y, carousel_button_size, carousel_button_size),
+    };
+}
+
+fn contentBounds(bounds: ui.Rect) ui.Rect {
+    const x = bounds.x + carousel_button_size + carousel_gap;
+    return ui.Rect.init(x, bounds.y, @max(component_primitives.min_extent, bounds.w - carousel_button_size * 2.0 - carousel_gap * 2.0), bounds.h);
+}
+
+const carousel_button_size: f32 = 28.0;
+const carousel_gap: f32 = 8.0;
+const carousel_radius: f32 = 8.0;
+const carousel_text_padding: f32 = 8.0;
+const carousel_label_max_lines: usize = 1;
+
+test "carousel component renders content and button hit regions" {
+    const carousel = Carousel{ .id = 990, .label = "Slide" };
+    var h = component_test.InteractiveHarness(24, 2){};
+    h.init();
+
+    try h.render(carousel, ui.Rect.init(0, 0, 240, 40), .{});
+    try carousel.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 40));
+
+    try h.expectText("Slide");
+    try h.expectHitCount(2);
+    try h.expectHitId(1, 991);
+}
+
+test "carousel measurement follows label text" {
+    const short = Carousel{ .id = 990, .label = "Slide" };
+    const long = Carousel{ .id = 990, .label = "Runtime authority walkthrough" };
+
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+}

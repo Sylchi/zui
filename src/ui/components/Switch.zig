@@ -1,0 +1,119 @@
+const std = @import("std");
+const clock = @import("../../clock.zig");
+const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
+const object = @import("../../object.zig");
+const ui = @import("../core.zig");
+const text_component = @import("Text.zig");
+const layout = @import("../layouts/Types.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const component_primitives = @import("../infra/Primitives.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
+
+pub const Switch = struct {
+    id: u32,
+    flags: common.ComponentFlags = .{},
+    label: []const u8,
+    checked: bool,
+
+    pub fn node(self: Switch) ui.Node {
+        return ui.switchNode(self.id, self.label, self.checked);
+    }
+
+    pub fn accessibility(self: Switch) common.Accessibility {
+        return .{ .role = .switch_control, .label = self.label, .control_id = self.id };
+    }
+
+    pub fn render(self: Switch, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        const pill = ui.Rect.init(bounds.x + bounds.w - switch_width, bounds.y + (bounds.h - switch_height) * 0.5, switch_width, switch_height);
+        const fill = if (self.checked) options.style.accent else options.style.row;
+        try scene.pushRect(pill.insetUniform(-switch_shadow_inset), switch_shadow, .shadow, switch_height * 0.5, switch_shadow_size);
+        try scene.pushGradientRect(pill, fill, switch_floor, switch_height * 0.5);
+        try scene.pushRect(pill, options.style.border, .border, switch_height * 0.5, 0.0);
+        const knob_x = if (self.checked) pill.x + pill.w - switch_knob_size - switch_knob_inset else pill.x + switch_knob_inset;
+        const knob = ui.Rect.init(knob_x, pill.y + switch_knob_inset, switch_knob_size, switch_knob_size);
+        try scene.pushRect(knob.insetUniform(-1.0), switch_knob_shadow, .shadow, switch_knob_size * 0.5, 4.0);
+        try scene.pushRect(knob, options.style.panel, .fill, switch_knob_size * 0.5, 0.0);
+        if (self.checked) try scene.pushRect(knob.insetUniform(5.0), options.style.accent, .fill, 4.0, 0.0);
+        const label_w = @max(component_primitives.min_extent, pill.x - bounds.x - switch_label_gap);
+        const label_h = @min(bounds.h, component_primitives.measuredTextHeight(self.label, label_w, switch_label_height, switch_label_max_lines));
+        try text_component.Text.renderWrapped(scene, ui.Rect.init(bounds.x, bounds.y, label_w, bounds.h).withHeightCentered(label_h), self.label, options.style.text, component_primitives.textWrap(self.label, switch_label_height, switch_label_max_lines));
+        try component_primitives.renderControlStateOverlay(scene, bounds, options, switch_height * 0.5);
+    }
+
+    pub fn collectInteractions(self: Switch, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return common.collectHit(collector, bounds, .switch_control, self.id);
+    }
+
+    pub fn measure(self: Switch, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        const label_constraints = constraints.inner(.{ .right = switch_width + switch_label_gap });
+        const label = text_component.Text.measureValue(self.label, label_constraints, component_primitives.textMetrics(self.label, switch_label_height, switch_label_max_lines));
+        const preferred = constrainPreferredSize(.{
+            .w = @max(switch_min_width, label.preferred.w + switch_label_gap + switch_width),
+            .h = @max(switch_height, label.preferred.h),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(switch_min_width, preferred.w), .h = @min(switch_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
+        ).applyExact(constraints);
+    }
+
+    pub fn toObject(self: Switch, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.stringAndRefObject(.switch_control, self.id, self.label, component_codec.boolRef(self.checked), ui_out, object_out, epoch);
+    }
+
+    pub fn writeRecord(self: Switch, writer: *component_codec.Writer, index: usize) bool {
+        return component_codec.stringAndRefRecord(writer, index, .switch_control, self.id, self.label, component_codec.boolRef(self.checked));
+    }
+
+    pub fn fromView(view: object.View) Error!Switch {
+        return component_codec.decodeFromView(Switch, .switch_control, view);
+    }
+
+    pub fn fromNode(switch_control: @FieldType(ui.Node, "switch_control")) Error!Switch {
+        return .{ .id = switch_control.id, .label = switch_control.label, .checked = switch_control.checked };
+    }
+};
+
+const switch_width: f32 = 36.0;
+const switch_height: f32 = 20.0;
+const switch_knob_size: f32 = 14.0;
+const switch_knob_inset: f32 = 3.0;
+const switch_label_gap: f32 = 10.0;
+const switch_label_height: f32 = component_primitives.control_label_height;
+const switch_label_max_lines: usize = 2;
+const switch_min_width: f32 = 112.0;
+const switch_knob_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 30 };
+const switch_shadow = ui.Color{ .r = 0, .g = 0, .b = 0, .a = 18 };
+const switch_floor = ui.Color{ .r = 6, .g = 8, .b = 11, .a = 12 };
+const switch_shadow_inset: f32 = 1.0;
+const switch_shadow_size: f32 = 2.0;
+
+test "switch component uses panel token for knob" {
+    const switch_control = Switch{ .id = 12, .label = "Public", .checked = true };
+    var commands: [16]ui.Command = undefined;
+    var scene = ui.Scene.init(&commands);
+    const panel = ui.Color{ .r = 1, .g = 2, .b = 3 };
+
+    try switch_control.render(&scene, ui.Rect.init(0, 0, 220, 32), .{ .style = .{ .panel = panel } });
+
+    try std.testing.expect(component_test.hasFillColor(scene.written(), panel));
+}
+
+test "switch measurement wraps long labels under narrow constraints" {
+    const short = Switch{ .id = 12, .label = "Private", .checked = true };
+    const switch_control = Switch{ .id = 12, .label = "Require private runtime approvals", .checked = true };
+
+    const short_measured = short.measure(.{ .width = .{ .at_most = switch_min_width }, .text_wrap = .wrap }, .{});
+    const measured = switch_control.measure(.{ .width = .{ .at_most = switch_min_width }, .text_wrap = .wrap }, .{});
+
+    try std.testing.expect(measured.preferred.w <= switch_min_width);
+    try std.testing.expect(measured.preferred.h > short_measured.preferred.h);
+}

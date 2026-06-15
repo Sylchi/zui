@@ -1,0 +1,110 @@
+const clock = @import("../../clock.zig");
+const common = @import("../component_common.zig");
+const text_component = @import("Text.zig");
+const interaction = @import("../interaction.zig");
+const object = @import("../../object.zig");
+const ui = @import("../core.zig");
+const layout = @import("../layouts/Types.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const list_layout = @import("../infra/ListLayout.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+pub const ToggleGroup = struct {
+    id: u32,
+    flags: common.ComponentFlags = .{},
+    first: []const u8,
+    second: []const u8,
+    active: u16 = 0,
+
+    pub fn node(self: ToggleGroup) ui.Node {
+        return ui.toggleGroupNode(self.id, self.first, self.second, list_layout.clampedIndex(self.active, toggle_group_item_count));
+    }
+
+    pub fn render(self: ToggleGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        const active = list_layout.clampedIndex(self.active, toggle_group_item_count);
+        try list_layout.renderSegment(scene, itemBounds(bounds, 0), self.first, active == 0, segmentPaint(options));
+        try list_layout.renderSegment(scene, itemBounds(bounds, 1), self.second, active == 1, segmentPaint(options));
+        try list_layout.renderSegment(scene, itemBounds(bounds, 2), toggle_group_third_label, active == 2, segmentPaint(options));
+    }
+
+    pub fn collectInteractions(self: ToggleGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        for (0..toggle_group_item_count) |index| {
+            try collector.addHit(itemBounds(bounds, index), .button, self.id + @as(u32, @intCast(index)));
+        }
+    }
+
+    pub fn measure(self: ToggleGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        const labels = [_][]const u8{ self.first, self.second, toggle_group_third_label };
+        return list_layout.measureSegments(&labels, constraints, .{
+            .item_count = @intCast(toggle_group_item_count),
+            .padding = toggle_text_padding,
+        });
+    }
+
+    pub fn toObject(self: ToggleGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.singleObjectFromRecord(@TypeOf(self), self, ui_out, object_out, epoch);
+    }
+
+    pub fn writeRecord(self: ToggleGroup, writer: *component_codec.Writer, index: usize) bool {
+        return component_codec.twoStringRecord(writer, index, .toggle_group, list_layout.encodedIndexedId(self.id, self.active, toggle_group_item_count), self.first, self.second);
+    }
+
+    pub fn fromView(view: object.View) Error!ToggleGroup {
+        return component_codec.decodeFromView(ToggleGroup, .toggle_group, view);
+    }
+
+    pub fn fromNode(group: @FieldType(ui.Node, "toggle_group")) Error!ToggleGroup {
+        return .{ .id = group.id, .first = group.first, .second = group.second, .active = list_layout.clampedIndex(group.active, toggle_group_item_count) };
+    }
+};
+
+pub const toggle_group_id_stride: u32 = toggle_group_item_count;
+
+fn segmentPaint(options: RenderOptions) list_layout.SegmentPaint {
+    return .{
+        .active_fill = options.style.row,
+        .inactive_fill = ui.Color.clear,
+        .border = options.style.border,
+        .active_text = options.style.text,
+        .inactive_text = options.style.muted,
+        .padding = toggle_text_padding,
+    };
+}
+
+fn itemBounds(bounds: ui.Rect, index: usize) ui.Rect {
+    return list_layout.equalSegmentBounds(bounds, index, toggle_group_item_count);
+}
+
+pub const toggle_group_item_count: u32 = 3;
+const toggle_group_third_label = "Right";
+const toggle_text_padding: f32 = 8.0;
+
+test "toggle group component renders toggles and hit regions" {
+    const group = ToggleGroup{ .id = 550, .first = "Left", .second = "Center", .active = 1 };
+    var h = component_test.InteractiveHarness(32, 3){};
+    h.init();
+
+    try h.render(group, ui.Rect.init(0, 0, 180, 36), .{});
+    try group.collectInteractions(&h.collector, ui.Rect.init(0, 0, 180, 36));
+
+    try h.expectText("Left");
+    try h.expectText("Center");
+    try h.expectText("Right");
+    try h.expectHitCount(toggle_group_item_count);
+    try h.expectHitId(2, 552);
+}
+
+test "toggle group measurement follows segment labels" {
+    const short = ToggleGroup{ .id = 550, .first = "L", .second = "C", .active = 0 };
+    const long = ToggleGroup{ .id = 550, .first = "Runtime", .second = "Authority", .active = 0 };
+
+    const short_measured = short.measure(.{}, .{});
+    const long_measured = long.measure(.{}, .{});
+
+    try component_test.expect(short_measured.min.w < short_measured.preferred.w);
+    try component_test.expect(long_measured.preferred.w > short_measured.preferred.w);
+}

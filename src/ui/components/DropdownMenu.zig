@@ -1,0 +1,79 @@
+const clock = @import("../../clock.zig");
+const common = @import("../component_common.zig");
+const text_component = @import("Text.zig");
+const interaction = @import("../interaction.zig");
+const object = @import("../../object.zig");
+const ui = @import("../core.zig");
+const layout = @import("../layouts/Types.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const primitives = @import("../infra/Primitives.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+pub const DropdownMenu = struct {
+    id: u32,
+    flags: common.ComponentFlags = .{},
+    first: []const u8,
+    second: []const u8,
+
+    const serialization = component_codec.TwoStringComponent(DropdownMenu, "dropdown_menu", "first", "second");
+
+    pub fn node(self: DropdownMenu) ui.Node {
+        return ui.dropdownMenuNode(self.id, self.first, self.second);
+    }
+
+    pub fn accessibility(self: DropdownMenu) common.Accessibility {
+        return .{ .role = .menu, .label = self.first, .control_id = self.id };
+    }
+
+    pub fn render(self: DropdownMenu, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        try primitives.renderSidePanelTwoItemMenu(scene, bounds, self.id, options, menu_panel_layout, options.style.accent, options.style.border, menu_trigger_padding, dropdown_menu_trigger, options.style.bg, self.first, self.second, menu_radius, menu_list_layout);
+    }
+
+    pub fn collectInteractions(self: DropdownMenu, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        try primitives.collectSidePanelMenuHits(collector, bounds, menu_panel_layout, self.id, menu_list_layout, menu_item_count);
+    }
+
+    pub fn measure(self: DropdownMenu, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        return primitives.measureSidePanelMenu(dropdown_menu_trigger, self.first, self.second, constraints, menu_panel_layout, menu_trigger_padding, menu_list_layout);
+    }
+    pub const toObject = serialization.toObject;
+    pub const writeRecord = serialization.writeRecord;
+    pub const fromView = serialization.fromView;
+
+    pub fn fromNode(menu: @FieldType(ui.Node, "dropdown_menu")) Error!DropdownMenu {
+        return .{ .id = menu.id, .first = menu.first, .second = menu.second };
+    }
+};
+
+const dropdown_menu_trigger = "Open";
+const menu_item_count: usize = 2;
+const menu_panel_layout = primitives.SidePanelLayout{ .trigger_y = 4.0, .trigger_w = 64.0, .trigger_h = 30.0, .gap = 8.0 };
+const menu_radius: f32 = 8.0;
+const menu_list_layout = primitives.MenuListLayout{ .padding = 5.0, .item_h = 14.0, .item_pitch = 16.0, .item_radius = 4.0, .item_padding = 5.0, .item_text_h = 12.0 };
+const menu_trigger_padding: f32 = 8.0;
+
+test "dropdown menu component renders menu rows and hit regions" {
+    const menu = DropdownMenu{ .id = 998, .first = "Profile", .second = "Settings" };
+    var h = component_test.InteractiveHarness(24, 3){};
+    h.init();
+
+    try h.render(menu, ui.Rect.init(0, 0, 240, 52), .{ .overlay = .{ .open_ids = &.{menu.id} } });
+    try menu.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 52));
+
+    try h.expectText("Open");
+    try h.expectText("Profile");
+    try h.expectText("Settings");
+    try h.expectHitCount(3);
+    try h.expectHitId(2, 1000);
+}
+
+test "dropdown menu measurement follows item text" {
+    const short = DropdownMenu{ .id = 998, .first = "One", .second = "Two" };
+    const long = DropdownMenu{ .id = 998, .first = "Runtime profile", .second = "Authority settings" };
+
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+}

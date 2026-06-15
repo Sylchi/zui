@@ -1,0 +1,138 @@
+const clock = @import("../../clock.zig");
+const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
+const object = @import("../../object.zig");
+const ui = @import("../core.zig");
+const text_component = @import("Text.zig");
+const layout = @import("../layouts/Types.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const icon_component = @import("Icon.zig");
+const primitives = @import("../infra/Primitives.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+const contentInset = primitives.contentInset;
+const renderControlFrame = primitives.renderControlFrame;
+const renderControlText = primitives.renderControlText;
+const Icon = icon_component.Icon;
+
+pub const Combobox = struct {
+    id: u32,
+    flags: common.ComponentFlags = .{},
+    placeholder: []const u8,
+    selected: []const u8,
+
+    pub fn node(self: Combobox) ui.Node {
+        return ui.comboboxNode(self.id, self.placeholder, self.selected);
+    }
+
+    pub fn render(self: Combobox, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        const input = inputBounds(bounds);
+        try renderControlFrame(scene, input, options.style.panel, options.style.border, primitives.control_radius);
+        if (contentInset(input, primitives.control_text_padding)) |input_content| {
+            const text_bounds = ui.Rect.init(input_content.x, input_content.y, @max(primitives.min_extent, input_content.w - combobox_icon_space), input_content.h);
+            try text_component.Text.renderAligned(scene, text_bounds.withHeightCentered(primitives.control_label_height), self.placeholder, options.style.muted, .start);
+            try Icon.named(.chevron_right).renderColor(scene, ui.Rect.init(input_content.x + input_content.w - combobox_icon_size, input_content.y + (input_content.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), options.style.muted);
+        }
+
+        const popup = popupBounds(bounds);
+        try scene.pushRect(popup, options.style.panel, .fill, combobox_popup_radius, 0.0);
+        try scene.pushRect(popup, options.style.border, .border, combobox_popup_radius, 0.0);
+        try renderOption(scene, optionBounds(bounds), self.selected, true, options);
+    }
+
+    pub fn collectInteractions(self: Combobox, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        try collector.addHit(inputBounds(bounds), .input, self.id);
+        try collector.addHit(optionBounds(bounds), .button, common.offsetId(self.id, 1));
+    }
+
+    pub fn measure(self: Combobox, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        const placeholder = text_component.Text.measureValue(self.placeholder, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.placeholder, primitives.control_label_height, combobox_text_max_lines));
+        const selected = text_component.Text.measureValue(self.selected, .{ .width = .unconstrained, .text_wrap = .nowrap }, primitives.textMetrics(self.selected, primitives.control_label_height, combobox_text_max_lines));
+        const input_w = placeholder.preferred.w + primitives.control_text_padding * 2.0 + combobox_icon_space;
+        const option_w = selected.preferred.w + combobox_popup_padding * 2.0 + combobox_option_indicator_w;
+        const preferred = primitives.constrainPreferredSize(.{
+            .w = @max(input_w, option_w),
+            .h = combobox_input_h + combobox_popup_gap + combobox_popup_padding * 2.0 + @max(primitives.control_label_height, selected.preferred.h),
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = primitives.min_extent + primitives.control_text_padding * 2.0 + combobox_icon_space, .h = combobox_input_h },
+            preferred,
+            .{ .w = primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
+        ).applyExact(constraints);
+    }
+
+    pub fn toObject(self: Combobox, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.twoStringObject(.combobox, self.id, self.placeholder, self.selected, ui_out, object_out, epoch);
+    }
+
+    pub fn writeRecord(self: Combobox, writer: *component_codec.Writer, index: usize) bool {
+        return component_codec.twoStringRecord(writer, index, .combobox, self.id, self.placeholder, self.selected);
+    }
+
+    pub fn fromView(view: object.View) Error!Combobox {
+        return component_codec.decodeFromView(Combobox, .combobox, view);
+    }
+
+    pub fn fromNode(combobox: @FieldType(ui.Node, "combobox")) Error!Combobox {
+        return .{ .id = combobox.id, .placeholder = combobox.placeholder, .selected = combobox.selected };
+    }
+};
+
+fn inputBounds(bounds: ui.Rect) ui.Rect {
+    return ui.Rect.init(bounds.x, bounds.y, bounds.w, @min(combobox_input_h, bounds.h));
+}
+
+fn optionBounds(bounds: ui.Rect) ui.Rect {
+    const popup = popupBounds(bounds);
+    return ui.Rect.init(popup.x + combobox_popup_padding, popup.y + combobox_popup_padding, @max(primitives.min_extent, popup.w - combobox_popup_padding * 2.0), @max(primitives.min_extent, popup.h - combobox_popup_padding * 2.0));
+}
+
+fn popupBounds(bounds: ui.Rect) ui.Rect {
+    const y = bounds.y + combobox_input_h + combobox_popup_gap;
+    return ui.Rect.init(bounds.x, y, bounds.w, @max(primitives.min_extent, bounds.y + bounds.h - y));
+}
+
+fn renderOption(scene: *ui.Scene, bounds: ui.Rect, label: []const u8, selected: bool, options: RenderOptions) ui.RenderError!void {
+    try scene.pushRect(bounds, options.style.row, .fill, primitives.control_radius, 0.0);
+    try renderControlText(scene, ui.Rect.init(bounds.x, bounds.y, @max(primitives.min_extent, bounds.w - combobox_option_indicator_w), bounds.h), combobox_option_padding, primitives.control_label_height, label, options.style.text, .start);
+    if (selected) {
+        try Icon.named(.check).renderColor(scene, ui.Rect.init(bounds.x + bounds.w - combobox_icon_size - combobox_option_padding, bounds.y + (bounds.h - combobox_icon_size) * 0.5, combobox_icon_size, combobox_icon_size), options.style.accent);
+    }
+}
+
+const combobox_input_h: f32 = 36.0;
+const combobox_popup_gap: f32 = 6.0;
+const combobox_popup_radius: f32 = 8.0;
+const combobox_popup_padding: f32 = 4.0;
+const combobox_icon_size: f32 = 14.0;
+const combobox_icon_space: f32 = 22.0;
+const combobox_option_padding: f32 = 8.0;
+const combobox_option_indicator_w: f32 = 28.0;
+const combobox_text_max_lines: usize = 1;
+
+test "combobox component renders input option and hit regions" {
+    const combobox = Combobox{ .id = 991, .placeholder = "Search framework", .selected = "React" };
+    var h = component_test.InteractiveHarness(20, 2){};
+    h.init();
+
+    try h.render(combobox, ui.Rect.init(0, 0, 240, 82), .{});
+    try combobox.collectInteractions(&h.collector, ui.Rect.init(0, 0, 240, 82));
+
+    try h.expectText("Search framework");
+    try h.expectText("React");
+    try h.expectIcon(Icon.named(.check).tag());
+    try h.expectHitCount(2);
+    try h.expectHitKind(0, .input);
+    try h.expectHitKind(1, .button);
+}
+
+test "combobox measurement follows placeholder and selected text" {
+    const short = Combobox{ .id = 991, .placeholder = "Find", .selected = "Zig" };
+    const long = Combobox{ .id = 991, .placeholder = "Search runtime framework", .selected = "Component authority model" };
+
+    try component_test.expect(long.measure(.{}, .{}).preferred.w > short.measure(.{}, .{}).preferred.w);
+}

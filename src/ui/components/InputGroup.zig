@@ -1,0 +1,115 @@
+const clock = @import("../../clock.zig");
+const common = @import("../component_common.zig");
+const interaction = @import("../interaction.zig");
+const object = @import("../../object.zig");
+const ui = @import("../core.zig");
+const text_component = @import("Text.zig");
+const layout = @import("../layouts/Types.zig");
+const text_metrics = @import("../text_metrics.zig");
+const component_test = @import("../infra/TestSupport.zig");
+const component_codec = @import("../infra/Codec.zig");
+const component_primitives = @import("../infra/Primitives.zig");
+
+const Error = common.Error;
+const RenderOptions = common.RenderOptions;
+
+const constrainPreferredSize = component_primitives.constrainPreferredSize;
+const contentInset = component_primitives.contentInset;
+
+pub const InputGroup = struct {
+    id: u32,
+    flags: common.ComponentFlags = .{},
+    addon: []const u8,
+    placeholder: []const u8,
+
+    pub fn node(self: InputGroup) ui.Node {
+        return ui.inputGroupNode(self.id, self.addon, self.placeholder);
+    }
+
+    pub fn render(self: InputGroup, scene: *ui.Scene, bounds: ui.Rect, options: RenderOptions) ui.RenderError!void {
+        try scene.pushRect(bounds, options.style.panel, .fill, component_primitives.control_radius, 0.0);
+        try scene.pushRect(bounds, options.style.border, .border, component_primitives.control_radius, 0.0);
+        const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, text_metrics.width(self.addon, component_primitives.control_label_height) + input_group_addon_padding * 2.0));
+        const addon_bounds = ui.Rect.init(bounds.x, bounds.y, addon_w, bounds.h);
+        if (contentInset(addon_bounds, input_group_addon_padding)) |inner| {
+            const addon_h = @min(inner.h, component_primitives.measuredTextHeight(self.addon, inner.w, component_primitives.control_label_height, input_group_text_max_lines));
+            try text_component.Text.renderWrapped(scene, inner.withHeightCentered(addon_h), self.addon, options.style.muted, component_primitives.textWrap(self.addon, component_primitives.control_label_height, input_group_text_max_lines));
+        }
+        try scene.pushRect(ui.Rect.init(addon_bounds.x + addon_bounds.w, bounds.y + input_group_separator_inset, separator_height, @max(component_primitives.min_extent, bounds.h - input_group_separator_inset * 2.0)), options.style.border, .fill, 0.0, 0.0);
+        const control_bounds = ui.Rect.init(addon_bounds.x + addon_bounds.w + input_group_control_gap, bounds.y, @max(component_primitives.min_extent, bounds.w - addon_w - input_group_control_gap), bounds.h);
+        if (contentInset(control_bounds, component_primitives.control_text_padding)) |inner| {
+            const placeholder_h = @min(inner.h, component_primitives.measuredTextHeight(self.placeholder, inner.w, component_primitives.control_label_height, input_group_text_max_lines));
+            try text_component.Text.renderWrapped(scene, inner.withHeightCentered(placeholder_h), self.placeholder, options.style.muted, component_primitives.textWrap(self.placeholder, component_primitives.control_label_height, input_group_text_max_lines));
+        }
+    }
+
+    pub fn collectInteractions(self: InputGroup, collector: *interaction.Collector, bounds: ui.Rect) interaction.Error!void {
+        return common.collectHit(collector, bounds, .input, self.id);
+    }
+
+    pub fn measure(self: InputGroup, constraints: layout.Constraints, options: RenderOptions) layout.Measurement {
+        _ = options;
+        const addon = text_component.Text.measureValue(self.addon, constraints, component_primitives.textMetrics(self.addon, component_primitives.control_label_height, input_group_text_max_lines));
+        const addon_w = @min(input_group_addon_max_w, @max(input_group_addon_min_w, addon.preferred.w + input_group_addon_padding * 2.0));
+        const placeholder_constraints = constraints.inner(.{ .left = addon_w + input_group_control_gap + component_primitives.control_text_padding, .right = component_primitives.control_text_padding });
+        const placeholder = text_component.Text.measureValue(self.placeholder, placeholder_constraints, component_primitives.textMetrics(self.placeholder, component_primitives.control_label_height, input_group_text_max_lines));
+        const preferred_h = @max(input_group_min_height, @max(addon.preferred.h, placeholder.preferred.h) + component_primitives.control_text_padding * 2.0);
+        const preferred = constrainPreferredSize(.{
+            .w = @max(input_group_min_width, addon_w + input_group_control_gap + component_primitives.control_text_padding * 2.0 + placeholder.preferred.w),
+            .h = preferred_h,
+        }, constraints);
+        return layout.Measurement.flexible(
+            .{ .w = @min(input_group_min_width, preferred.w), .h = @min(input_group_min_height, preferred.h) },
+            preferred,
+            .{ .w = component_primitives.maxMeasuredWidth(constraints, preferred.w), .h = preferred.h },
+        ).applyExact(constraints);
+    }
+
+    pub fn toObject(self: InputGroup, ui_out: []u8, object_out: []u8, epoch: clock.Stamp) ?[]u8 {
+        return component_codec.twoStringObject(.input_group, self.id, self.addon, self.placeholder, ui_out, object_out, epoch);
+    }
+
+    pub fn writeRecord(self: InputGroup, writer: *component_codec.Writer, index: usize) bool {
+        return component_codec.twoStringRecord(writer, index, .input_group, self.id, self.addon, self.placeholder);
+    }
+
+    pub fn fromView(view: object.View) Error!InputGroup {
+        return component_codec.decodeFromView(InputGroup, .input_group, view);
+    }
+
+    pub fn fromNode(input_group: @FieldType(ui.Node, "input_group")) Error!InputGroup {
+        return .{ .id = input_group.id, .addon = input_group.addon, .placeholder = input_group.placeholder };
+    }
+};
+
+const separator_height: f32 = 1.0;
+const input_group_addon_min_w: f32 = 42.0;
+const input_group_addon_max_w: f32 = 96.0;
+const input_group_addon_padding: f32 = 10.0;
+const input_group_control_gap: f32 = 8.0;
+const input_group_separator_inset: f32 = 8.0;
+const input_group_text_max_lines: usize = 2;
+const input_group_min_width: f32 = 140.0;
+const input_group_min_height: f32 = 36.0;
+
+test "input group component renders addon placeholder and input hit" {
+    const input_group = InputGroup{ .id = 91, .addon = "https://", .placeholder = "example.com" };
+    var h = component_test.InteractiveHarness(16, 1){};
+    h.init();
+
+    try h.render(input_group, ui.Rect.init(0, 0, 260, 40), .{});
+    try input_group.collectInteractions(&h.collector, ui.Rect.init(0, 0, 260, 40));
+
+    try h.expectText("https://");
+    try h.expectText("example.com");
+    try h.expectHitKind(0, .input);
+}
+
+test "input group measurement wraps long addon and placeholder under narrow constraints" {
+    const input_group = InputGroup{ .id = 91, .addon = "authority://", .placeholder = "runtime identity example" };
+
+    const measured = input_group.measure(.{ .width = .{ .at_most = input_group_min_width }, .text_wrap = .wrap }, .{});
+
+    try component_test.expect(measured.preferred.w <= input_group_min_width);
+    try component_test.expect(measured.preferred.h > input_group_min_height);
+}
