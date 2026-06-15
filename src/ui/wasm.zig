@@ -34,6 +34,23 @@ fn stringFromWasm(ptr: [*]const u8, len: u32) []const u8 {
     return ptr[0..len];
 }
 
+/// Returns the address of the internal command buffer in WASM linear memory.
+/// After calling `er_ui_wasm_render`, the host can read `count` sequential
+/// `Command` structs starting at this address, where `count` is the return
+/// value of `er_ui_wasm_render`.
+export fn er_ui_wasm_command_buffer_ptr() u32 {
+    return @intFromPtr(&command_storage);
+}
+
+/// Returns the size (in bytes) of a single `ui.Command` struct.
+/// The host needs this to calculate byte offsets when reading the command
+/// buffer: `byte_offset = command_index * command_size`.
+export fn er_ui_wasm_command_size() u32 {
+    return @sizeOf(ui.Command);
+}
+
+/// Returns the API version (currently 1).
+/// Use this to verify host–module compatibility at load time.
 export fn er_ui_wasm_version() u32 {
     return 1;
 }

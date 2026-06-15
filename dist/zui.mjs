@@ -1,28 +1,12 @@
 const _textEncoder = new TextEncoder();
 const _textDecoder = new TextDecoder();
 
-// ── Component creation helpers ──────────────────────────────
-// Each returns { alloc: (exports) => slot, ... } binding
-
 function _stringArg(str) {
   const bytes = _textEncoder.encode(str);
   return { ptr: bytes, len: bytes.length };
 }
 
 // ── Layout tree → slot mapper ───────────────────────────────
-// Tree nodes:
-//   { type: 'column', gap, padding, children: [...] }
-//   { type: 'row',    gap, padding, children: [...] }
-//   { type: 'text',   value, weight? }
-//   { type: 'button', id, label, variant?, leadingIcon?, trailingIcon? }
-//   { type: 'input',  id, placeholder? }
-//   { type: 'card',   title, detail? }
-//   { type: 'badge',  label, variant? }
-//   { type: 'checkbox', id, label, checked? }
-//   { type: 'slider', id, label, value? }
-//   { type: 'separator' }
-//   { type: 'icon',   label, iconValue }
-//   { type: 'row_item', id, title, detail? }
 
 const _leafTypes = new Set([
   'text', 'button', 'input', 'card', 'badge',
@@ -31,7 +15,7 @@ const _leafTypes = new Set([
 
 class _SlotManager {
   #exports;
-  #slots = new Map(); // node path → { slot, node, bounds }
+  #slots = new Map();
 
   constructor(exports) {
     this.#exports = exports;
@@ -186,7 +170,6 @@ class _SlotManager {
       return slot;
     }
 
-    // Container: column or row
     if (node.type === 'column' || node.type === 'row') {
       const children = node.children ?? [];
       for (let i = 0; i < children.length; i++) {
@@ -226,16 +209,177 @@ class _SlotManager {
     }
   }
 
-  render(exports) {
-    this.layout(exports, 800, 600);
+  render(exports, containerWidth, containerHeight) {
+    this.layout(exports, containerWidth, containerHeight);
     const results = [];
     for (const [path, entry] of this._slots) {
       const b = entry.bounds;
       if (!b) continue;
       const cmds = exports.er_ui_wasm_render(entry.slot, 0, 0, b.x, b.y, b.w, b.h);
-      results.push({ path, slot: entry.slot, type: entry.node.type, bounds: b, commandCount: cmds });
+      results.push({ path, slot: entry.slot, type: entry.node.type, bounds: b, commandCount: cmds, node: entry.node });
     }
     return results;
+  }
+}
+
+// ── Command stream reader ───────────────────────────────────
+
+class _CommandReader {
+  #exports;
+  #cmdSize;
+  #mem;
+
+  constructor(exports) {
+    this.#exports = exports;
+    this.#cmdSize = exports.er_ui_wasm_command_size();
+    this.#mem = new Uint8Array(exports.memory.buffer);
+  }
+
+  readAll(count) {
+    const ptr = this.#exports.er_ui_wasm_command_buffer_ptr();
+    const dv = new DataView(this.#exports.memory.buffer);
+    const cmds = [];
+
+    for (let i = 0; i < count; i++) {
+      const base = ptr + i * this.#cmdSize;
+      const tag = dv.getUint8(base);
+      // tag (1 byte) + padding (3 bytes) → variant payload at base+4
+      const payload = base + 4;
+      cmds.push(this._parse(tag, payload, dv));
+    }
+
+    return cmds;
+  }
+
+  _parse(tag, off, dv) {
+    switch (tag) {
+      case 0: return this._rect(off, dv, 'rect');
+      case 1: return this._rect(off, dv, 'overlay_rect');
+      case 2: return this._border(off, dv);
+      case 3: return this._text(off, dv, 'text');
+      case 4: return this._text(off, dv, 'overlay_text');
+      case 5: return this._dragSource(off, dv);
+      case 6: return this._dropTarget(off, dv);
+      case 7: return this._iconQuad(off, dv, 'icon_quad');
+      case 8: return this._iconQuad(off, dv, 'overlay_icon_quad');
+      case 9: return this._svgQuad(off, dv);
+      case 10: return this._quad(off, dv, 'text_quad');
+      case 11: return this._quad(off, dv, 'image_quad');
+      case 12: return this._transition(off, dv);
+      default: return { type: 'unknown', tag };
+    }
+  }
+
+  _rect(off, dv, type) {
+    const x = dv.getFloat32(off, true);
+    const y = dv.getFloat32(off + 4, true);
+    const w = dv.getFloat32(off + 8, true);
+    const h = dv.getFloat32(off + 12, true);
+    const r = dv.getUint8(off + 16);
+    const g = dv.getUint8(off + 17);
+    const b = dv.getUint8(off + 18);
+    const a = dv.getUint8(off + 19);
+    const mode = dv.getUint8(off + 24);
+    const radius = dv.getFloat32(off + 28, true);
+    return { type, bounds: { x, y, w, h }, color: { r, g, b, a }, mode, radius };
+  }
+
+  _border(off, dv) {
+    const x = dv.getFloat32(off, true);
+    const y = dv.getFloat32(off + 4, true);
+    const w = dv.getFloat32(off + 8, true);
+    const h = dv.getFloat32(off + 12, true);
+    const r = dv.getUint8(off + 16);
+    const g = dv.getUint8(off + 17);
+    const b = dv.getUint8(off + 18);
+    const a = dv.getUint8(off + 19);
+    return { type: 'border', bounds: { x, y, w, h }, color: { r, g, b, a } };
+  }
+
+  _text(off, dv, type) {
+    const x = dv.getFloat32(off, true);
+    const y = dv.getFloat32(off + 4, true);
+    const w = dv.getFloat32(off + 8, true);
+    const h = dv.getFloat32(off + 12, true);
+    const strPtr = dv.getUint32(off + 16, true);
+    const strLen = dv.getUint32(off + 20, true);
+    const r = dv.getUint8(off + 24);
+    const g = dv.getUint8(off + 25);
+    const b = dv.getUint8(off + 26);
+    const a = dv.getUint8(off + 27);
+    const alignment = dv.getUint8(off + 28);
+    const weight = dv.getUint8(off + 29);
+    let value = '';
+    if (strPtr > 0 && strLen > 0) {
+      value = _textDecoder.decode(this.#mem.slice(strPtr, strPtr + strLen));
+    }
+    return { type, origin: { x, y, w, h }, value, color: { r, g, b, a }, alignment, weight };
+  }
+
+  _iconQuad(off, dv, type) {
+    const x = dv.getFloat32(off, true);
+    const y = dv.getFloat32(off + 4, true);
+    const w = dv.getFloat32(off + 8, true);
+    const h = dv.getFloat32(off + 12, true);
+    const iconId = dv.getUint32(off + 16, true);
+    const r = dv.getUint8(off + 20);
+    const g = dv.getUint8(off + 21);
+    const b = dv.getUint8(off + 22);
+    const a = dv.getUint8(off + 23);
+    return { type, bounds: { x, y, w, h }, iconId, color: { r, g, b, a } };
+  }
+
+  _quad(off, dv, type) {
+    const x = dv.getFloat32(off, true);
+    const y = dv.getFloat32(off + 4, true);
+    const w = dv.getFloat32(off + 8, true);
+    const h = dv.getFloat32(off + 12, true);
+    const u0 = dv.getFloat32(off + 16, true);
+    const v0 = dv.getFloat32(off + 20, true);
+    const u1 = dv.getFloat32(off + 24, true);
+    const v1 = dv.getFloat32(off + 28, true);
+    const atlasId = dv.getUint32(off + 32, true);
+    const r = dv.getUint8(off + 36);
+    const g = dv.getUint8(off + 37);
+    const b = dv.getUint8(off + 38);
+    const a = dv.getUint8(off + 39);
+    return { type, bounds: { x, y, w, h }, uv: { u0, v0, u1, v1 }, atlasId, color: { r, g, b, a } };
+  }
+
+  _dragSource(off, dv) {
+    const scopeId = dv.getUint32(off, true);
+    const itemId = dv.getUint32(off + 4, true);
+    const index = dv.getUint32(off + 8, true);
+    const x = dv.getFloat32(off + 12, true);
+    const y = dv.getFloat32(off + 16, true);
+    const w = dv.getFloat32(off + 20, true);
+    const h = dv.getFloat32(off + 24, true);
+    return { type: 'drag_source', scopeId, itemId, index, bounds: { x, y, w, h } };
+  }
+
+  _dropTarget(off, dv) {
+    const scopeId = dv.getUint32(off, true);
+    const index = dv.getUint32(off + 4, true);
+    const x = dv.getFloat32(off + 8, true);
+    const y = dv.getFloat32(off + 12, true);
+    const w = dv.getFloat32(off + 16, true);
+    const h = dv.getFloat32(off + 20, true);
+    return { type: 'drop_target', scopeId, index, bounds: { x, y, w, h } };
+  }
+
+  _transition(off, dv) {
+    const id = dv.getUint32(off, true);
+    const property = dv.getUint8(off + 4);
+    const from = dv.getFloat32(off + 8, true);
+    const to = dv.getFloat32(off + 12, true);
+    const duration = dv.getUint32(off + 16, true);
+    const delay = dv.getUint32(off + 20, true);
+    const easing = dv.getUint8(off + 24);
+    return { type: 'transition', id, property, from, to, duration, delay, easing };
+  }
+
+  _svgQuad(off, dv) {
+    return this._iconQuad(off, dv, 'svg_quad');
   }
 }
 
@@ -245,16 +389,13 @@ export class Zui {
   #exports = null;
   #memory = null;
   #manager = null;
-  #stringBufSize = 4096;
-  #stringPtr = 0;
+  #reader = null;
 
   constructor(exports, memory) {
     this.#exports = exports;
     this.#memory = memory;
     this.#manager = new _SlotManager(exports);
-    // Reserve string buffer at end of linear memory
-    const mem = new Uint8Array(memory.buffer);
-    this.#stringPtr = mem.length - this.#stringBufSize;
+    this.#reader = new _CommandReader(exports);
   }
 
   static async create(wasmUrl) {
@@ -305,16 +446,35 @@ export class Zui {
     return this.#exports.er_ui_wasm_deserialize(ptr, bytes.length);
   }
 
+  // ── Command reading ────────────────────────────────────
+
+  /** Read parsed Scene commands from WASM linear memory. Call after render(). */
+  readCommands(count) {
+    return this.#reader.readAll(count);
+  }
+
+  /** Read commands for a specific slot by re-rendering it.
+   *  `bounds` should match the original render position so re-rendering
+   *  produces consistent results. */
+  readSlotCommands(slot, bounds = {}) {
+    const { x = 0, y = 0, w = 200, h = 40 } = bounds;
+    const count = this.#exports.er_ui_wasm_render(slot, 0, 0, x, y, w, h);
+    return this.#reader.readAll(count);
+  }
+
   // ── High-level tree API ─────────────────────────────────
 
-  /** Set UI tree from a declarative JSON tree, erasing any previous tree. */
   setTree(node) {
     this.#manager.setTree(node);
   }
 
-  /** Render the current tree with slot layout. Returns per-slot render results. */
   renderAll(containerWidth = 800, containerHeight = 600) {
     return this.#manager.render(this.#exports, containerWidth, containerHeight);
+  }
+
+  /** Read the exported WASM memory buffer (for advanced use). */
+  get memoryBuffer() {
+    return this.#memory.buffer;
   }
 }
 
