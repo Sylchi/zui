@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZUI Basic Example</title>
+<style>
+  body { font-family: system-ui, sans-serif; padding: 2rem; background: #f5f5f5; }
+  pre { background: #1e1e2e; color: #cdd6f4; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+  .output { margin-top: 1rem; }
+  .slot { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; }
+  .slot h3 { margin: 0 0 0.25rem; font-size: 0.9rem; color: #666; }
+  .slot p { margin: 0; font-size: 0.85rem; color: #333; }
+</style>
+</head>
+<body>
+  <h1>ZUI Basic Example</h1>
+  <p>Loading WASM module and building a component tree... <span id="status">⏳</span></p>
+
+  <div class="output" id="output"></div>
+
+  <h2>Console Output</h2>
+  <pre id="log">Waiting...</pre>
+
+  <script type="module">
+    import init from '../../dist/zui.mjs';
+
+    const log = document.getElementById('log');
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
+
+    function appendLog(msg) {
+      log.textContent += '\n' + msg;
+    }
+
+    try {
+      const zui = await init('../../dist/zui.wasm');
+      status.textContent = '✅ Loaded';
+      appendLog(`ZUI v${zui.version} loaded`);
+      appendLog(`Max slots: ${zui.maxSlots}`);
+
+      // Build a column with text, button, and input
+      zui.setTree({
+        type: 'column',
+        gap: 12,
+        padding: 16,
+        children: [
+          { type: 'text', value: 'Hello ZUI!', width: 300 },
+          { type: 'button', id: 1, label: 'Click me', variant: 0, width: 200 },
+          { type: 'input', id: 2, placeholder: 'Type something...', width: 300 },
+          { type: 'badge', label: 'New', variant: 2, width: 80 },
+          { type: 'separator' },
+          { type: 'checkbox', id: 3, label: 'Enable feature', checked: true, width: 300 },
+        ],
+      });
+
+      appendLog('Tree set, rendering...');
+      const results = zui.renderAll(400, 300);
+      appendLog(`Rendered ${results.length} components:`);
+
+      // Display results
+      output.innerHTML = '';
+      for (const r of results) {
+        const div = document.createElement('div');
+        div.className = 'slot';
+        div.innerHTML = `<h3>${r.type} (slot ${r.slot})</h3>
+          <p>Bounds: (${r.bounds.x.toFixed(0)}, ${r.bounds.y.toFixed(0)}, ${r.bounds.w.toFixed(0)}, ${r.bounds.h.toFixed(0)})</p>
+          <p>Commands: ${r.commandCount}</p>`;
+        output.appendChild(div);
+        appendLog(`  ${r.path}: ${r.type} → ${r.commandCount} commands @ (${r.bounds.x.toFixed(0)},${r.bounds.y.toFixed(0)})`);
+      }
+
+      // Also demo slot API directly
+      appendLog('\n--- Direct slot API demo ---');
+      const s = zui.alloc();
+      appendLog(`Allocated slot ${s}`);
+
+      const mem = new Uint8Array(/* memory access handled internally */);
+      // For direct API, write string and call new_*
+      const encoder = new TextEncoder();
+      const buf = new Uint8Array(1 << 20);
+      const str = 'Direct API';
+      const strBytes = encoder.encode(str);
+      const ptr = 1024 * 1024 - strBytes.length - 1;
+      buf.set(strBytes, ptr);
+      buf[ptr + strBytes.length] = 0;
+
+      // We need the exports directly for the low-level API
+      // Import the low-level approach via the class methods
+      const cmds = zui.render(s, 10, 10, 150, 30);
+      appendLog(`Rendered slot ${s}: ${cmds} commands`);
+      zui.free(s);
+      appendLog(`Freed slot ${s}`);
+
+      appendLog('\n✅ All examples completed successfully');
+    } catch (err) {
+      status.textContent = '❌ Error';
+      appendLog(`Error: ${err.message}`);
+      console.error(err);
+    }
+  </script>
+</body>
+</html>

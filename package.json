@@ -4,7 +4,7 @@
   "description": "Pure-Zig UI framework — components, layout, vector GPU pipeline. Compiles to WASM for cross-platform use.",
   "keywords": ["zig", "ui", "gui", "wasm", "canvas", "components", "layout"],
   "homepage": "https://github.com/Sylchi/zui",
-  "repository": "github:Sylchi/zui",
+  "repository": { "type": "git", "url": "https://github.com/Sylchi/zui.git" },
   "license": "MIT",
   "type": "module",
   "main": "./dist/zui.mjs",
