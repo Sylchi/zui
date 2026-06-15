@@ -166,7 +166,7 @@ class _SlotManager {
   _buildTree(node, path) {
     if (_leafTypes.has(node.type)) {
       const slot = this._toSlot(node, path);
-      this._slots.set(path, { slot, node, bounds: null });
+      this.#slots.set(path, { slot, node, bounds: null });
       return slot;
     }
 
@@ -190,12 +190,14 @@ class _SlotManager {
     let y = padding;
     const maxW = containerWidth - 2 * padding;
 
-    for (const [path, entry] of this._slots) {
+    for (const [path, entry] of this.#slots) {
       const measureW = entry.node.width ?? maxW;
       const measureH = entry.node.height ?? -1;
       const packed = exports.er_ui_wasm_measure(entry.slot, measureW, measureH);
-      const wF32 = new Float32Array(new Uint32Array([packed >>> 32]).buffer)[0];
-      const hF32 = new Float32Array(new Uint32Array([packed & 0xFFFFFFFF]).buffer)[0];
+      const wBits = Number(packed >> 32n);
+      const hBits = Number(packed & 0xFFFFFFFFn);
+      const wF32 = new Float32Array(new Uint32Array([wBits]).buffer)[0];
+      const hF32 = new Float32Array(new Uint32Array([hBits]).buffer)[0];
       const w = isNaN(wF32) ? 100 : Math.min(wF32, maxW);
       const h = isNaN(hF32) ? 24 : hF32;
 
@@ -212,7 +214,7 @@ class _SlotManager {
   render(exports, containerWidth, containerHeight) {
     this.layout(exports, containerWidth, containerHeight);
     const results = [];
-    for (const [path, entry] of this._slots) {
+    for (const [path, entry] of this.#slots) {
       const b = entry.bounds;
       if (!b) continue;
       const cmds = exports.er_ui_wasm_render(entry.slot, 0, 0, b.x, b.y, b.w, b.h);
@@ -239,13 +241,13 @@ class _CommandReader {
     const ptr = this.#exports.er_ui_wasm_command_buffer_ptr();
     const dv = new DataView(this.#exports.memory.buffer);
     const cmds = [];
+    const tagOff = this.#cmdSize - 4; // tag byte is in the LAST 4 bytes of the struct
 
     for (let i = 0; i < count; i++) {
       const base = ptr + i * this.#cmdSize;
-      const tag = dv.getUint8(base);
-      // tag (1 byte) + padding (3 bytes) → variant payload at base+4
-      const payload = base + 4;
-      cmds.push(this._parse(tag, payload, dv));
+      const tag = dv.getUint8(base + tagOff);
+      // payload starts at 'base' (offset 0 of the struct), tag is at base + tagOff
+      cmds.push(this._parse(tag, base, dv));
     }
 
     return cmds;
@@ -428,8 +430,9 @@ export class Zui {
   render(slot, x, y, w, h)    { return this.#exports.er_ui_wasm_render(slot, 0, 0, x ?? 0, y ?? 0, w ?? 200, h ?? 40); }
   measure(slot, w, h) {
     const packed = this.#exports.er_ui_wasm_measure(slot, w ?? -1, h ?? -1);
-    const u32 = new Uint32Array([packed >>> 32, packed & 0xFFFFFFFF]);
-    return { width: new Float32Array(u32.slice(0,1).buffer)[0], height: new Float32Array(u32.slice(1,2).buffer)[0] };
+    const wBits = Number(packed >> 32n);
+    const hBits = Number(packed & 0xFFFFFFFFn);
+    return { width: new Float32Array(new Uint32Array([wBits]).buffer)[0], height: new Float32Array(new Uint32Array([hBits]).buffer)[0] };
   }
   serialize(slot) {
     const cap = 1024;
@@ -475,6 +478,11 @@ export class Zui {
   /** Read the exported WASM memory buffer (for advanced use). */
   get memoryBuffer() {
     return this.#memory.buffer;
+  }
+
+  /** Direct access to WASM exports (for advanced use). */
+  get wasmExports() {
+    return this.#exports;
   }
 }
 

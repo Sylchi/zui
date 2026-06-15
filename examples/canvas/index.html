@@ -2,904 +2,394 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ZUI Interactive Showcase</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZUI Component Gallery</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, sans-serif; background: #0f0f14; color: #e0e0e8; min-height: 100vh; }
-  header { background: linear-gradient(135deg, #1a1a2e, #2d1b4e); border-bottom: 1px solid rgba(124,58,237,0.3); padding: 1.25rem 2rem; display: flex; align-items: center; gap: 1.5rem; }
-  header h1 { font-size: 1.4rem; font-weight: 600; background: linear-gradient(90deg, #c084fc, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-  header .subtitle { color: #888; font-size: 0.85rem; }
-  header .status { margin-left: auto; font-size: 0.8rem; padding: 0.35rem 0.75rem; border-radius: 6px; background: rgba(255,255,255,0.05); }
-  header .status.loaded { background: rgba(34,197,94,0.15); color: #4ade80; }
-  header .status.error { background: rgba(239,68,68,0.15); color: #f87171; }
-  header .badge { background: rgba(124,58,237,0.2); color: #c084fc; font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
-
-  .main { display: grid; grid-template-columns: 280px 1fr 260px; gap: 0; height: calc(100vh - 60px); }
-  .panel { padding: 1.25rem; overflow-y: auto; border-right: 1px solid rgba(255,255,255,0.06); }
-  .panel:last-child { border-right: none; }
-
-  .panel h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 0.75rem; }
-  .panel h3 { font-size: 0.8rem; color: #aaa; margin: 1rem 0 0.5rem; }
-
-  .canvas-wrap { display: flex; align-items: center; justify-content: center; background: #0a0a0f; position: relative; overflow: hidden; }
-  canvas { border-radius: 12px; box-shadow: 0 0 60px rgba(124,58,237,0.08), 0 0 2px rgba(124,58,237,0.2); image-rendering: auto; }
-
-  .component-btn { display: block; width: 100%; text-align: left; padding: 0.5rem 0.75rem; margin-bottom: 0.25rem; background: transparent; border: 1px solid transparent; border-radius: 6px; color: #bbb; cursor: pointer; font-size: 0.8rem; transition: all 0.15s; }
-  .component-btn:hover { background: rgba(255,255,255,0.04); color: #fff; }
-  .component-btn.active { background: rgba(124,58,237,0.15); border-color: rgba(124,58,237,0.3); color: #c084fc; }
-  .component-btn .count { float: right; color: #555; font-size: 0.7rem; }
-
-  .prop-group { margin-bottom: 0.75rem; }
-  .prop-group label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 0.25rem; }
-  .prop-group input[type="text"],
-  .prop-group select { width: 100%; padding: 0.45rem 0.6rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; color: #e0e0e8; font-size: 0.8rem; }
-  .prop-group input[type="text"]:focus,
-  .prop-group select:focus { outline: none; border-color: #7c3aed; }
-  .prop-group input[type="range"] { width: 100%; accent-color: #7c3aed; }
-  .prop-group .range-label { display: flex; justify-content: space-between; font-size: 0.7rem; color: #666; }
-  .prop-group .toggle { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
-  .prop-group .toggle input { accent-color: #7c3aed; }
-
-  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-  .meta-item { background: rgba(255,255,255,0.03); border-radius: 6px; padding: 0.5rem; }
-  .meta-item .label { font-size: 0.65rem; color: #666; text-transform: uppercase; }
-  .meta-item .value { font-size: 0.9rem; color: #c084fc; font-weight: 500; margin-top: 0.15rem; }
-  .meta-item .value.green { color: #4ade80; }
-  .meta-item .value.orange { color: #fbbf24; }
-  .meta-item .value.pink { color: #f472b6; }
-
-  .cmd-list { margin-top: 0.75rem; }
-  .cmd-item { font-size: 0.7rem; display: flex; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
-  .cmd-item .tag { color: #7c3aed; min-width: 4rem; }
-  .cmd-item .bounds { color: #888; }
-
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.3); border-radius: 2px; }
-
-  .fps { position: absolute; top: 1rem; right: 1rem; font-size: 0.7rem; color: #555; font-variant-numeric: tabular-nums; }
-  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #444; font-size: 0.85rem; gap: 0.5rem; }
-
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-  .loading { animation: pulse 1.5s ease-in-out infinite; }
-
-  .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; }
-  .btn-row button { flex: 1; padding: 0.5rem; background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.2); border-radius: 6px; color: #c084fc; cursor: pointer; font-size: 0.75rem; transition: all 0.15s; }
-  .btn-row button:hover { background: rgba(124,58,237,0.25); }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f0f14;color:#e0e0e8;min-height:100vh}
+header{background:linear-gradient(135deg,#1a1a2e,#2d1b4e);border-bottom:1px solid rgba(124,58,237,.3);padding:1rem 2rem;display:flex;align-items:center;gap:1rem}
+header h1{font-size:1.2rem;font-weight:600;background:linear-gradient(90deg,#c084fc,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+header .sub{color:#666;font-size:.8rem}
+header .status{margin-left:auto;font-size:.75rem;padding:.25rem .6rem;border-radius:5px;background:rgba(34,197,94,.15);color:#4ade80}
+.tabs{display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,.06);padding:0 2rem;background:rgba(0,0,0,.2)}
+.tab{padding:.6rem 1.2rem;cursor:pointer;font-size:.8rem;color:#666;border-bottom:2px solid transparent;transition:all .15s}
+.tab:hover{color:#aaa}
+.tab.on{color:#c084fc;border-bottom-color:#7c3aed}
+.main{display:grid;grid-template-columns:1fr 280px;height:calc(100vh-108px)}
+.canvas-wrap{display:flex;align-items:center;justify-content:center;background:#0a0a0f;position:relative;overflow:hidden;padding:1rem}
+canvas{border-radius:8px;image-rendering:auto;box-shadow:0 0 80px rgba(124,58,237,.06)}
+.sidebar{padding:1rem;overflow-y:auto;border-left:1px solid rgba(255,255,255,.06)}
+.sidebar h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#555;margin-bottom:.5rem}
+.sidebar h3{font-size:.75rem;color:#777;margin:1rem 0 .35rem}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.stat{background:rgba(255,255,255,.03);border-radius:5px;padding:.4rem}
+.stat .l{font-size:.6rem;color:#555;text-transform:uppercase}
+.stat .v{font-size:.8rem;color:#c084fc;margin-top:2px}
+.cmd-list{font-size:.65rem;font-family:monospace}
+.cmd{border-bottom:1px solid rgba(255,255,255,.03);padding:2px 0;display:flex;gap:4px}
+.cmd .t{color:#7c3aed;font-weight:600;min-width:5rem}
+.cmd .d{color:#888;overflow:hidden;text-overflow:ellipsis}
+.cmd .c{margin-left:auto;color:#555}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(124,58,237,.3);border-radius:2px}
+.tip{color:#444;font-size:.7rem;text-align:center;padding:2rem}
+canvas{cursor:crosshair}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>ZUI Showcase</h1>
-  <span class="badge">v0.1</span>
-  <span class="subtitle">Pure-Zig UI in WASM · Interactive Canvas Demo</span>
-  <span class="status loading" id="status">⏳ Loading...</span>
+  <h1>ZUI Gallery</h1><span style="font-size:.7rem;color:#666">v0.1</span>
+  <span class="sub">Real command stream · Components · Icons · Variants</span>
+  <span class="status" id="status">Loading...</span>
 </header>
 
+<div class="tabs" id="tabs"></div>
+
 <div class="main">
-  <!-- Left Panel: Component Browser -->
-  <div class="panel">
-    <h2>Components</h2>
-    <div id="componentList"></div>
-
-    <h3>Properties</h3>
-    <div id="properties">
-      <div class="empty-state">Select a component to edit</div>
-    </div>
-
-    <div class="btn-row">
-      <button id="btnAll">Show All</button>
-      <button id="btnClear">Clear</button>
-    </div>
+  <div class="canvas-wrap">
+    <canvas id="c" width="640" height="520"></canvas>
   </div>
-
-  <!-- Center: Canvas -->
-  <div class="canvas-wrap" id="canvasWrap">
-    <canvas id="canvas" width="520" height="480"></canvas>
-    <div class="fps" id="fps">-- fps</div>
-  </div>
-
-  <!-- Right Panel: Metadata -->
-  <div class="panel">
-    <h2>Slot Info</h2>
-    <div class="meta-grid" id="slotMeta">
-      <div class="meta-item"><div class="label">Slots Used</div><div class="value" id="mSlots">0</div></div>
-      <div class="meta-item"><div class="label">Total Commands</div><div class="value green" id="mCmds">0</div></div>
-      <div class="meta-item"><div class="label">WASM Size</div><div class="value" id="mWasm">--</div></div>
-      <div class="meta-item"><div class="label">FPS</div><div class="value orange" id="mFps">--</div></div>
-    </div>
-
+  <div class="sidebar">
+    <h2>Stats</h2>
+    <div class="stat-grid" id="stats"></div>
+    <h3>Hovered Slot</h3>
+    <div id="slotInfo"><div class="tip">Hover a component on canvas</div></div>
     <h3>Command Stream</h3>
-    <div class="cmd-list" id="cmdList">
-      <div class="empty-state">Render to see commands</div>
-    </div>
-
-    <h3>Selected Slot</h3>
-    <div id="slotDetail">
-      <div class="empty-state">Select a slot</div>
-    </div>
+    <div class="cmd-list" id="cmdList"><div class="tip">Hover to see commands</div></div>
   </div>
 </div>
 
 <script>
-// roundRect polyfill for older browsers
-if (!CanvasRenderingContext2D.prototype.roundRect) {
-  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
-    r = Math.min(r, w / 2, h / 2);
-    this.moveTo(x + r, y);
-    this.arcTo(x + w, y, x + w, y + h, r);
-    this.arcTo(x + w, y + h, x, y + h, r);
-    this.arcTo(x, y + h, x, y, r);
-    this.arcTo(x, y, x + w, y, r);
-    return this;
-  };
-}
+if(!CanvasRenderingContext2D.prototype.roundRect)
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){r=Math.min(r,w/2,h/2);this.moveTo(x+r,y);this.arcTo(x+w,y,x+w,y+h,r);this.arcTo(x+w,y+h,x,y+h,r);this.arcTo(x,y+h,x,y,r);this.arcTo(x,y,x+w,y,r);return this}
 </script>
 <script type="module">
 import init from '../../dist/zui.mjs';
 
-// ── Element refs ────────────────────────────────────────────
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const status = document.getElementById('status');
-const fpsEl = document.getElementById('fps');
-const compList = document.getElementById('componentList');
-const propsPanel = document.getElementById('properties');
-const mSlots = document.getElementById('mSlots');
-const mCmds = document.getElementById('mCmds');
-const mWasm = document.getElementById('mWasm');
-const mFps = document.getElementById('mFps');
-const cmdList = document.getElementById('cmdList');
-const slotDetail = document.getElementById('slotDetail');
-const btnAll = document.getElementById('btnAll');
-const btnClear = document.getElementById('btnClear');
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
+const tabsEl=document.getElementById('tabs');
+const statsEl=document.getElementById('stats');
+const cmdListEl=document.getElementById('cmdList');
+const slotInfoEl=document.getElementById('slotInfo');
+const statusEl=document.getElementById('status');
 
-// ── State ───────────────────────────────────────────────────
-let zui;
-let lastResults = [];
-let selectedPath = null;
-let animFrame = null;
-let frameCount = 0;
-let lastFpsTime = 0;
-let treeConfig = {
-  gap: 8,
-  padding: 16,
-  children: [
-    { type: 'text', value: 'ZUI Component Demo', width: 488 },
-    { type: 'button', id: 1, label: 'Click Me', variant: 0, width: 150 },
-    { type: 'input', id: 2, placeholder: 'Type something...', width: 488 },
-    { type: 'checkbox', id: 3, label: 'Enable dark mode', checked: true, width: 488 },
-    { type: 'badge', label: 'Preview', variant: 2, width: 80 },
-    { type: 'separator' },
-    { type: 'card', title: 'Status', detail: 'All systems nominal' },
-    { type: 'slider', id: 4, label: 'Volume', value: 0.65, width: 488 },
-    { type: 'row_item', id: 5, title: 'Active Users', detail: '42' },
-  ],
-};
+let zui,curTab='gallery';
+let slotMap=[]; // {slot,path,type,bounds,cmds}
 
-// Pre-built showcases for each component type
-const showcases = {
-  all: treeConfig,
-  text: { gap: 8, padding: 16, children: [
-    { type: 'text', value: 'Regular Text', width: 488 },
-    { type: 'text', value: 'A longer paragraph demonstrating how text wraps across multiple lines in the ZUI layout engine', width: 488 },
-  ]},
-  button: { gap: 8, padding: 16, children: [
-    { type: 'button', id: 1, label: 'Primary', variant: 0, width: 200 },
-    { type: 'button', id: 2, label: 'Secondary', variant: 1, width: 200 },
-    { type: 'button', id: 3, label: 'Outline', variant: 2, width: 200 },
-  ]},
-  input: { gap: 8, padding: 16, children: [
-    { type: 'input', id: 1, placeholder: 'Default input', width: 488 },
-    { type: 'input', id: 2, placeholder: 'Search...', width: 488 },
-  ]},
-  card: { gap: 8, padding: 16, children: [
-    { type: 'card', title: 'Welcome Back', detail: 'You have 3 unread notifications' },
-    { type: 'card', title: 'System Health', detail: 'CPU: 23% · RAM: 1.2/8 GB · Uptime: 12d' },
-  ]},
-  badge: { gap: 8, padding: 16, children: [
-    { type: 'badge', label: 'New', variant: 2, width: 80 },
-    { type: 'badge', label: 'Draft', variant: 1, width: 80 },
-    { type: 'badge', label: 'Active', variant: 0, width: 80 },
-  ]},
-  checkbox: { gap: 8, padding: 16, children: [
-    { type: 'checkbox', id: 1, label: 'Enable notifications', checked: true, width: 488 },
-    { type: 'checkbox', id: 2, label: 'Dark mode', checked: false, width: 488 },
-    { type: 'checkbox', id: 3, label: 'Auto-update', checked: true, width: 488 },
-  ]},
-  slider: { gap: 8, padding: 16, children: [
-    { type: 'slider', id: 1, label: 'Brightness', value: 0.8, width: 488 },
-    { type: 'slider', id: 2, label: 'Contrast', value: 0.5, width: 488 },
-    { type: 'slider', id: 3, label: 'Saturation', value: 0.3, width: 488 },
-  ]},
-  separator: { gap: 12, padding: 16, children: [
-    { type: 'text', value: 'Above the line', width: 488 },
-    { type: 'separator' },
-    { type: 'text', value: 'Below the line', width: 488 },
-  ]},
-  row_item: { gap: 4, padding: 16, children: [
-    { type: 'row_item', id: 1, title: 'Settings', detail: '⚙' },
-    { type: 'row_item', id: 2, title: 'Account', detail: 'user@example.com' },
-  ]},
-};
+function rgba(c,a=(c.a??255)/255){return `rgba(${c.r},${c.g},${c.b},${a})`}
 
-// ── Canvas drawing ──────────────────────────────────────────
+function ws(s){const e=new TextEncoder(),b=e.encode(s);const m=new Uint8Array(zui.memoryBuffer);const p=m.length-b.length-1;m.set(b,p);m[p+b.length]=0;return{ptr:p>>>0,len:b.length}}
 
-const COLORS = {
-  bg: '#1e1e2e',
-  surface: '#2a2a3e',
-  surfaceHover: '#333350',
-  primary: '#7c3aed',
-  primaryLight: '#c084fc',
-  text: '#e0e0e8',
-  textDim: '#8888a0',
-  border: '#3a3a50',
-  success: '#4ade80',
-  danger: '#f87171',
-  warning: '#fbbf24',
-  card: '#252540',
-};
+// ── Tab definitions ───────────────────────────────────────
 
-function hexToRgba(r, g, b, a = 255) {
-  return `rgba(${r},${g},${b},${a/255})`;
-}
-
-function drawComponent(type, bounds, node) {
-  const { x, y, w, h } = bounds;
-  if (w <= 0 || h <= 0) return;
-  const r = 6;
-
-  switch (type) {
-    case 'text': {
-      const weight = node?.weight ?? 'regular';
-      ctx.font = weight === 'bold' ? 'bold 14px system-ui' : weight === 'semibold' ? '600 14px system-ui' : '14px system-ui';
-      ctx.fillStyle = COLORS.text;
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node?.value ?? '', x + 4, y + h/2);
-      break;
-    }
-
-    case 'button': {
-      const variant = node?.variant ?? 0;
-      const colors = [
-        { bg: COLORS.primary, text: '#fff' },  // primary
-        { bg: COLORS.surface, text: COLORS.text },  // secondary
-        { bg: 'transparent', text: COLORS.primary, border: COLORS.primary },  // outline
-        { bg: 'transparent', text: COLORS.text },  // ghost
-        { bg: COLORS.danger, text: '#fff' },  // destructive
-        { bg: 'transparent', text: COLORS.primaryLight },  // link
+const TABS={
+  gallery:{
+    label:'🎨 Gallery',
+    build(){
+      const e=zui.wasmExports;
+      const entries=[
+        {type:'text',label:'Regular weight',value:'Regular text',width:280},
+        {type:'text',label:'Semibold',value:'Semibold text',weight:'semibold'},
+        {type:'text',label:'Bold',value:'Bold text',weight:'bold'},
       ];
-      const c = colors[Math.min(variant, 5)];
-      if (c.bg !== 'transparent') {
-        ctx.fillStyle = c.bg;
-        ctx.beginPath();
-        ctx.roundRect(x, y, w, h, r);
-        ctx.fill();
+      for(let i=0;i<6;i++)entries.push({type:'button',label:['Primary','Secondary','Outline','Ghost','Destructive','Link'][i],variant:i,width:140});
+      entries.push({type:'separator'});
+      for(let i=0;i<6;i++)entries.push({type:'badge',label:['Default','Secondary','New','Outline','Ghost','Link'][i],variant:i,width:90});
+      entries.push({type:'separator'});
+      entries.push({type:'input',placeholder:'Search...',width:280});
+      entries.push({type:'checkbox',label:'Enable notifications',checked:true});
+      entries.push({type:'slider',label:'Volume',value:.65});
+      entries.push({type:'separator'});
+      entries.push({type:'card',title:'System Status',detail:'CPU 23% · RAM 1.2GB · 12d uptime'});
+      entries.push({type:'row_item',title:'Active Users',detail:'42'});
+      entries.push({type:'icon',label:'Heart',iconValue:9829},{type:'icon',label:'Star',iconValue:9733});
+      return entries;
+    }
+  },
+  buttons:{
+    label:'🔘 Buttons',
+    build(){
+      const entries=[];
+      for(let v=0;v<6;v++){
+        const labels=['Primary','Secondary','Outline','Ghost','Destructive','Link'];
+        entries.push({type:'button',label:`${labels[v]}`,variant:v,width:180});
+        entries.push({type:'button',label:`${labels[v]} + icon`,variant:v,leadingIcon:1,width:220});
       }
-      if (c.border) {
-        ctx.strokeStyle = c.border;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.roundRect(x, y, w, h, r);
-        ctx.stroke();
-      }
-      ctx.fillStyle = c.text;
-      ctx.font = '600 13px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node?.label ?? '', x + w/2, y + h/2);
-      ctx.textAlign = 'start';
-      break;
+      return entries;
     }
-
-    case 'input': {
-      ctx.fillStyle = '#1a1a2e';
-      ctx.beginPath();
-      ctx.roundRect(x, y, w, h, r);
-      ctx.fill();
-      ctx.strokeStyle = COLORS.border;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(x, y, w, h, r);
-      ctx.stroke();
-      ctx.fillStyle = COLORS.textDim;
-      ctx.font = '13px system-ui';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node?.placeholder ?? '', x + 10, y + h/2);
-      break;
+  },
+  badges:{
+    label:'🏷️ Badges',
+    build(){
+      return[0,1,2,3,4,5].map(v=>({type:'badge',label:['Default','Secondary','New','Outline','Ghost','Link'][v],variant:v,width:110}));
     }
-
-    case 'card': {
-      ctx.fillStyle = COLORS.card;
-      ctx.beginPath();
-      ctx.roundRect(x, y, w, h, r + 2);
-      ctx.fill();
-      // Subtle border
-      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(x, y, w, h, r + 2);
-      ctx.stroke();
-      // Title
-      ctx.fillStyle = COLORS.text;
-      ctx.font = '600 14px system-ui';
-      ctx.textBaseline = 'top';
-      ctx.fillText(node?.title ?? '', x + 12, y + 12);
-      // Detail
-      ctx.fillStyle = COLORS.textDim;
-      ctx.font = '12px system-ui';
-      ctx.fillText(node?.detail ?? '', x + 12, y + 32);
-      break;
+  },
+  icons:{
+    label:'🔣 Icons',
+    build(){
+      const icons=[{n:'Heart',v:9829},{n:'Star',v:9733},{n:'Check',v:10003},{n:'Bell',v:9830},{n:'Settings',v:9881},{n:'User',v:9787},{n:'Home',v:8987},{n:'Search',v:128269},{n:'Mail',v:9993},{n:'Clock',v:9201},{n:'Music',v:9835},{n:'Gear',v:9883},{n:'Tag',v:9776},{n:'Lock',v:128274},{n:'Key',v:9882},{n:'Pen',v:9998}];
+      return icons.map(i=>({type:'icon',label:i.n,iconValue:i.v}));
     }
-
-    case 'badge': {
-      const variant = node?.variant ?? 0;
-      const colors = [
-        { bg: 'rgba(124,58,237,0.2)', text: COLORS.primaryLight },
-        { bg: 'rgba(255,255,255,0.06)', text: COLORS.textDim },
-        { bg: 'rgba(248,113,113,0.2)', text: COLORS.danger },
-        { bg: 'transparent', text: COLORS.primaryLight, border: COLORS.primary },
-        { bg: 'transparent', text: COLORS.textDim },
-        { bg: 'transparent', text: COLORS.primaryLight },
+  },
+  form:{
+    label:'📋 Form',
+    build(){
+      return[
+        {type:'card',title:'Create Account',detail:'Fill in the details below'},
+        {type:'input',placeholder:'Username',width:400},
+        {type:'input',placeholder:'Email',width:400},
+        {type:'input',placeholder:'Password',width:400},
+        {type:'checkbox',label:'Subscribe to newsletter',checked:true,width:400},
+        {type:'slider',label:'Volume',value:.5,width:400},
+        {type:'separator'},
+        {type:'button',label:'Create Account',variant:0,width:200},
+        {type:'button',label:'Cancel',variant:2,width:120},
       ];
-      const c = colors[Math.min(variant, 5)];
-      const pr = 10;
-      if (c.bg !== 'transparent') {
-        ctx.fillStyle = c.bg;
-        ctx.beginPath();
-        ctx.roundRect(x, y, w, h, pr);
-        ctx.fill();
+    }
+  }
+};
+
+function buildTabs(){
+  tabsEl.innerHTML='';
+  for(const[k,v]of Object.entries(TABS)){
+    const t=document.createElement('div');
+    t.className='tab'+(k===curTab?' on':'');
+    t.textContent=v.label;
+    t.onclick=()=>{curTab=k;document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));t.classList.add('on');render();};
+    tabsEl.appendChild(t);
+  }
+}
+
+// ── Rendering pipeline ────────────────────────────────────
+
+function render(){
+  const e=zui.wasmExports,W=canvas.width,H=canvas.height;
+  e.er_ui_wasm_clear();
+  slotMap=[];
+
+  const entries=TABS[curTab].build();
+  let x=16,y=16,gap=8;
+
+  for(const node of entries){
+    if(node.type==='separator'){y+=8;continue;}
+    const slot=e.er_ui_wasm_alloc();
+    if(slot<0)break;
+
+    const w=node.width??200,h=node.height??0;
+    switch(node.type){
+      case 'text':{const s=ws(node.value);e.er_ui_wasm_new_text(slot,s.ptr,s.len);break}
+      case 'button':{const s=ws(node.label);e.er_ui_wasm_new_button(slot,1,s.ptr,s.len,node.variant??0,node.leadingIcon??0,node.trailingIcon??0);break}
+      case 'input':{const s=ws(node.placeholder??'');e.er_ui_wasm_new_input(slot,1,s.ptr,s.len);break}
+      case 'card':{const t=ws(node.title),d=ws(node.detail??'');e.er_ui_wasm_new_card(slot,t.ptr,t.len,d.ptr,d.len);break}
+      case 'badge':{const s=ws(node.label);e.er_ui_wasm_new_badge(slot,s.ptr,s.len,node.variant??0);break}
+      case 'checkbox':{const s=ws(node.label);e.er_ui_wasm_new_checkbox(slot,1,s.ptr,s.len,node.checked?1:0);break}
+      case 'slider':{const s=ws(node.label??'');e.er_ui_wasm_new_slider(slot,1,s.ptr,s.len,node.value??.5);break}
+      case 'icon':{const s=ws(node.label);e.er_ui_wasm_new_icon(slot,s.ptr,s.len,node.iconValue);break}
+      case 'row_item':{const t=ws(node.title),d=ws(node.detail??'');e.er_ui_wasm_new_row_item(slot,1,t.ptr,t.len,d.ptr,d.len);break}
+    }
+
+    // Measure
+    const packed=e.er_ui_wasm_measure(slot,w,-1);
+    const mw=Number(packed>>32n),mh=Number(packed&0xFFFFFFFFn);
+    const pw=new Float32Array(new Uint32Array([mw]).buffer)[0];
+    const ph=new Float32Array(new Uint32Array([mh]).buffer)[0];
+    const cw=isNaN(pw)||pw<=0?w:Math.min(pw,W-2*16);
+    const ch=isNaN(ph)||ph<=0?24:ph;
+
+    // Layout: wrap to next row if needed
+    if(x+cw>W-16){x=16;y+=ch+gap}
+    const bx=x,by=y;
+
+    // Render & read commands
+    const cmdCount=e.er_ui_wasm_render(slot,0,0,bx,by,cw,ch);
+    const cmds=zui.readCommands(cmdCount);
+
+    slotMap.push({slot,path:node.label||node.type,type:node.type,bounds:{x:bx,y:by,w:cw,h:ch},cmds,node});
+
+    x+=cw+gap;
+    if(x>=W-16){x=16;y+=ch+gap}
+  }
+
+  drawCanvas();
+  updateStats();
+  cmdListEl.innerHTML='<div class="tip">Hover a component to see commands</div>';
+  slotInfoEl.innerHTML='<div class="tip">Hover a component on canvas</div>';
+}
+
+// ── Canvas drawing ────────────────────────────────────────
+
+function drawCanvas(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#0f0f14';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Dot grid
+  ctx.fillStyle='rgba(255,255,255,.015)';
+  for(let x=0;x<canvas.width;x+=24)
+    for(let y=0;y<canvas.height;y+=24)
+      ctx.fillRect(x,y,1,1);
+
+  // Tab label
+  ctx.fillStyle='rgba(255,255,255,.03)';
+  ctx.fillRect(0,0,canvas.width,28);
+  ctx.fillStyle='#555';
+  ctx.font='11px system-ui';
+  ctx.textBaseline='middle';
+  const tabLabel=Object.entries(TABS).find(([k])=>k===curTab)?.[1]?.label||'';
+  ctx.fillText(`${tabLabel}  ·  ${slotMap.length} components`,12,14);
+
+  for(const entry of slotMap){
+    drawCmds(entry);
+  }
+}
+
+function drawCmds(entry){
+  for(const cmd of entry.cmds){
+    try{
+      const b=cmd.bounds||cmd.origin||{};
+      if(b.x===undefined)continue;
+      switch(cmd.type){
+        case 'rect':
+        case 'overlay_rect':{
+          ctx.fillStyle=rgba(cmd.color??{r:255,g:255,b:255,a:255});
+          const r=cmd.radius??0;
+          if(r>0){ctx.beginPath();ctx.roundRect(b.x,b.y,b.w,b.h,Math.min(r,12));ctx.fill()}
+          else ctx.fillRect(b.x,b.y,b.w,b.h);
+          break;
+        }
+        case 'border':{
+          ctx.strokeStyle=rgba(cmd.color??{r:255,g:255,b:255,a:255});
+          ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(b.x,b.y,b.w,b.h,4);ctx.stroke();
+          break;
+        }
+        case 'text':
+        case 'overlay_text':{
+          ctx.font='400 13px system-ui';ctx.textBaseline='middle';
+          ctx.fillStyle=rgba(cmd.color??{r:255,g:255,b:255,a:255});
+          const tx=cmd.alignment===0?b.x+4:cmd.alignment===2?b.x+b.w-4:b.x+b.w/2;
+          ctx.textAlign=['start','center','end'][cmd.alignment]??'start';
+          ctx.fillText(cmd.value||'',tx,b.y+b.h/2);
+          ctx.textAlign='start';
+          break;
+        }
+        case 'icon_quad':
+        case 'overlay_icon_quad':
+        case 'svg_quad':{
+          ctx.fillStyle=rgba(cmd.color??{r:255,g:255,b:255,a:255},.3);
+          ctx.beginPath();ctx.roundRect(b.x,b.y,b.w,b.h,4);ctx.fill();
+          ctx.strokeStyle=rgba(cmd.color??{r:255,g:255,b:255,a:255},.5);
+          ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(b.x,b.y,b.w,b.h,4);ctx.stroke();
+          ctx.fillStyle=rgba(cmd.color??{r:255,g:255,b:255,a:255});
+          ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText(String.fromCodePoint(cmd.iconId??63),b.x+b.w/2,b.y+b.h/2);
+          ctx.textAlign='start';
+          break;
+        }
+        case 'text_quad':
+        case 'image_quad':{
+          ctx.fillStyle='rgba(255,255,255,.03)';ctx.fillRect(b.x,b.y,b.w,b.h);
+          ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;ctx.strokeRect(b.x,b.y,b.w,b.h);
+          break;
+        }
+        case 'drag_source':case 'drop_target':{
+          ctx.strokeStyle='rgba(124,58,237,.3)';ctx.lineWidth=1;ctx.setLineDash([2,3]);
+          ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.setLineDash([]);
+          break;
+        }
       }
-      if (c.border) {
-        ctx.strokeStyle = c.border;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(x, y, w, h, pr);
-        ctx.stroke();
-      }
-      ctx.fillStyle = c.text;
-      ctx.font = '600 11px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node?.label ?? '', x + w/2, y + h/2);
-      ctx.textAlign = 'start';
-      break;
+    }catch(e){}
+  }
+}
+
+// ── Hover hit testing ─────────────────────────────────────
+
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const sx=canvas.width/rect.width;
+  const sy=canvas.height/rect.height;
+  const mx=(e.clientX-rect.left)*sx,my=(e.clientY-rect.top)*sy;
+
+  let found=null;
+  for(const entry of slotMap){
+    const b=entry.bounds;
+    if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){found=entry}
+  }
+
+  if(found){
+    // Highlight
+    drawCanvas();
+    const b=found.bounds;
+    ctx.strokeStyle='rgba(124,58,237,.4)';ctx.lineWidth=1.5;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.roundRect(b.x-2,b.y-2,b.w+4,b.h+4,6);ctx.stroke();ctx.setLineDash([]);
+
+    // Tooltip
+    ctx.fillStyle='rgba(0,0,0,.8)';
+    const tx=b.x+4<canvas.width/2?b.x+b.w+8:b.x-160;
+    const ty=Math.max(4,b.y-30);
+    ctx.beginPath();ctx.roundRect(tx,ty,155,24,4);ctx.fill();
+    ctx.fillStyle='#c084fc';ctx.font='11px system-ui';ctx.textBaseline='middle';
+    ctx.fillText(`${found.type}  ·  ${found.cmds.length} cmds`,tx+6,ty+12);
+
+    // Sidebar info
+    let total=found.cmds.length;
+    let txt=found.cmds.filter(c=>c.type==='text').length;
+    let ico=found.cmds.filter(c=>c.type.includes('icon_quad')||c.type==='svg_quad').length;
+    let rct=found.cmds.filter(c=>c.type==='rect'||c.type==='overlay_rect').length;
+
+    slotInfoEl.innerHTML=`
+      <div class="stat"><div class="l">Type</div><div class="v">${found.type}</div></div>
+      <div class="stat"><div class="l">Label</div><div class="v">${found.path||'—'}</div></div>
+      <div class="stat"><div class="l">Slot</div><div class="v">${found.slot}</div></div>
+      <div class="stat"><div class="l">Commands</div><div class="v">${total}</div></div>
+      <div class="stat"><div class="l">Rects</div><div class="v">${rct}</div></div>
+      <div class="stat"><div class="l">Texts</div><div class="v">${txt}</div></div>
+      <div class="stat"><div class="l">Icons</div><div class="v">${ico}</div></div>
+      <div class="stat" style="grid-column:1/-1"><div class="l">Bounds</div><div class="v">(${b.x.toFixed(0)},${b.y.toFixed(0)},${b.w.toFixed(0)},${b.h.toFixed(0)})</div></div>`;
+
+    // Command list
+    let ch='';
+    for(const c of found.cmds){
+      const bb=c.bounds||c.origin||{};
+      ch+=`<div class="cmd"><span class="t">${c.type}</span>`;
+      if(c.value)ch+=`<span class="d">"${c.value.substring(0,20)}"</span>`;
+      if(c.iconId!==undefined)ch+=`<span class="d">#${c.iconId}</span>`;
+      ch+=`<span class="c">${bb.w!==undefined?bb.w.toFixed(0)+'×'+bb.h.toFixed(0):''}</span></div>`;
     }
-
-    case 'checkbox': {
-      const boxSize = Math.min(h - 6, 16);
-      const bx = x + 4;
-      const by = y + (h - boxSize) / 2;
-      const checked = node?.checked ?? false;
-      ctx.fillStyle = checked ? COLORS.primary : 'transparent';
-      ctx.strokeStyle = checked ? COLORS.primary : COLORS.border;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect(bx, by, boxSize, boxSize, 3);
-      ctx.fill();
-      ctx.stroke();
-      if (checked) {
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(bx + 3, by + boxSize/2);
-        ctx.lineTo(bx + boxSize/3, by + boxSize - 3);
-        ctx.lineTo(bx + boxSize - 3, by + 3);
-        ctx.stroke();
-      }
-      ctx.fillStyle = COLORS.text;
-      ctx.font = '13px system-ui';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node?.label ?? '', bx + boxSize + 8, y + h/2);
-      break;
-    }
-
-    case 'slider': {
-      const trackY = y + h / 2 - 2;
-      const trackW = w - 8;
-      const trackX = x + 4;
-      const value = node?.value ?? 0.5;
-      // Track bg
-      ctx.fillStyle = COLORS.surface;
-      ctx.beginPath();
-      ctx.roundRect(trackX, trackY, trackW, 4, 2);
-      ctx.fill();
-      // Fill
-      ctx.fillStyle = COLORS.primary;
-      ctx.beginPath();
-      ctx.roundRect(trackX, trackY, trackW * Math.max(0, Math.min(1, value)), 4, 2);
-      ctx.fill();
-      // Thumb
-      const thumbX = trackX + trackW * value;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(thumbX, y + h/2, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = COLORS.primary;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(thumbX, y + h/2, 8, 0, Math.PI * 2);
-      ctx.stroke();
-      // Label
-      ctx.fillStyle = COLORS.textDim;
-      ctx.font = '11px system-ui';
-      ctx.textBaseline = 'top';
-      ctx.fillText(node?.label ?? '', x + 4, y + 3);
-      // Value
-      ctx.fillStyle = COLORS.text;
-      ctx.font = '600 11px system-ui';
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'right';
-      ctx.fillText(Math.round(value * 100) + '%', x + w - 4, y + 3);
-      ctx.textAlign = 'start';
-      break;
-    }
-
-    case 'separator': {
-      ctx.strokeStyle = COLORS.border;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      const sy = y + h / 2;
-      ctx.moveTo(x, sy);
-      ctx.lineTo(x + w, sy);
-      ctx.stroke();
-      break;
-    }
-
-    case 'row_item': {
-      // Background on hover
-      ctx.fillStyle = COLORS.text;
-      ctx.font = '600 13px system-ui';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node?.title ?? '', x + 10, y + h/2);
-      ctx.fillStyle = COLORS.textDim;
-      ctx.font = '12px system-ui';
-      ctx.textAlign = 'right';
-      ctx.fillText(node?.detail ?? '', x + w - 10, y + h/2);
-      ctx.textAlign = 'start';
-      // Bottom border
-      ctx.strokeStyle = COLORS.border;
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.moveTo(x, y + h);
-      ctx.lineTo(x + w, y + h);
-      ctx.stroke();
-      break;
-    }
-
-    default: {
-      ctx.fillStyle = 'rgba(124,58,237,0.1)';
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = 'rgba(124,58,237,0.3)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([3, 3]);
-      ctx.strokeRect(x, y, w, h);
-      ctx.setLineDash([]);
-      ctx.fillStyle = COLORS.textDim;
-      ctx.font = '10px system-ui';
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'center';
-      ctx.fillText(type, x + w/2, y + h/2);
-      ctx.textAlign = 'start';
-      break;
-    }
-  }
-}
-
-function renderToCanvas() {
-  const W = canvas.width;
-  const H = canvas.height;
-
-  // Dark background with subtle grid
-  ctx.fillStyle = '#0f0f14';
-  ctx.fillRect(0, 0, W, H);
-
-  // Subtle dot grid
-  ctx.fillStyle = 'rgba(255,255,255,0.02)';
-  for (let x = 0; x < W; x += 20) {
-    for (let y = 0; y < H; y += 20) {
-      ctx.fillRect(x, y, 1, 1);
-    }
-  }
-
-  // Title area
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
-  ctx.fillRect(0, 0, W, 36);
-  ctx.fillStyle = '#555';
-  ctx.font = '11px system-ui';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('Preview — ' + (lastResults.length || '0') + ' components rendered', 12, 18);
-
-  if (!lastResults.length) {
-    ctx.fillStyle = '#444';
-    ctx.font = '14px system-ui';
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
-    ctx.fillText('No components to render', W/2, H/2);
-    ctx.textAlign = 'start';
-    return;
-  }
-
-  // Draw selection highlight
-  for (const r of lastResults) {
-    if (r.path === selectedPath) {
-      const b = r.bounds;
-      ctx.strokeStyle = 'rgba(124,58,237,0.5)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.roundRect(b.x + 16, b.y + 36, b.w, b.h, 6);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-  }
-
-  // Draw each component
-  for (const r of lastResults) {
-    const b = r.bounds;
-    // Offset by 16,36 for the title bar + padding
-    const offsetBounds = { x: b.x + 16, y: b.y + 36, w: b.w, h: b.h };
-    drawComponent(r.type, offsetBounds, r.node);
-  }
-
-  // Draw selection label
-  if (selectedPath) {
-    const sel = lastResults.find(r => r.path === selectedPath);
-    if (sel) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      const sb = sel.bounds;
-      const lx = sb.x + 16;
-      const ly = sb.y + 36 - 18;
-      ctx.beginPath();
-      ctx.roundRect(lx, ly, 120, 18, 4);
-      ctx.fill();
-      ctx.fillStyle = COLORS.primaryLight;
-      ctx.font = '10px system-ui';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(`${sel.type} · ${sel.commandCount} cmds`, lx + 6, ly + 9);
-    }
-  }
-}
-
-// ── Build component browser ─────────────────────────────────
-
-function buildComponentList() {
-  compList.innerHTML = '';
-  const comps = [
-    { id: 'all', label: 'All Components', icon: '⊞' },
-    { id: 'text', label: 'Text', icon: 'T' },
-    { id: 'button', label: 'Button', icon: '▢' },
-    { id: 'input', label: 'Input', icon: '⌨' },
-    { id: 'card', label: 'Card', icon: '▣' },
-    { id: 'badge', label: 'Badge', icon: '◆' },
-    { id: 'checkbox', label: 'Checkbox', icon: '☑' },
-    { id: 'slider', label: 'Slider', icon: '━' },
-    { id: 'separator', label: 'Separator', icon: '—' },
-    { id: 'row_item', label: 'Row Item', icon: '≡' },
-  ];
-
-  for (const comp of comps) {
-    const btn = document.createElement('button');
-    btn.className = 'component-btn' + (comp.id === 'all' ? ' active' : '');
-    btn.dataset.id = comp.id;
-    btn.innerHTML = `<span style="opacity:0.5;margin-right:6px">${comp.icon}</span>${comp.label}`;
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.component-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      loadShowcase(comp.id);
-    });
-    compList.appendChild(btn);
-  }
-}
-
-function loadShowcase(id) {
-  const config = showcases[id] || showcases.all;
-  treeConfig = { ...config, children: config.children.map(c => ({ ...c })) };
-  buildAndRender();
-  updatePropertyPanel(null);
-  selectedPath = null;
-}
-
-// ── Property panel ──────────────────────────────────────────
-
-function updatePropertyPanel(path) {
-  const r = lastResults.find(r => r.path === path);
-  if (!r) {
-    propsPanel.innerHTML = '<div class="empty-state">Select a component to edit</div>';
-    return;
-  }
-
-  const node = { ...r.node };
-  let html = '';
-
-  if (node.type === 'text') {
-    html += textProp('value', 'Text', node.value ?? '');
-  }
-  if (node.type === 'button') {
-    html += textProp('label', 'Label', node.label ?? '');
-    html += selectProp('variant', 'Variant', node.variant ?? 0, [
-      ['0', 'Primary'], ['1', 'Secondary'], ['2', 'Outline'],
-      ['3', 'Ghost'], ['4', 'Destructive'], ['5', 'Link'],
-    ]);
-  }
-  if (node.type === 'input') {
-    html += textProp('placeholder', 'Placeholder', node.placeholder ?? '');
-  }
-  if (node.type === 'card') {
-    html += textProp('title', 'Title', node.title ?? '');
-    html += textProp('detail', 'Detail', node.detail ?? '');
-  }
-  if (node.type === 'badge') {
-    html += textProp('label', 'Label', node.label ?? '');
-    html += selectProp('variant', 'Variant', node.variant ?? 0, [
-      ['0', 'Default'], ['1', 'Secondary'], ['2', 'Destructive'],
-      ['3', 'Outline'], ['4', 'Ghost'], ['5', 'Link'],
-    ]);
-  }
-  if (node.type === 'checkbox') {
-    html += textProp('label', 'Label', node.label ?? '');
-    html += toggleProp('checked', 'Checked', node.checked ?? false);
-  }
-  if (node.type === 'slider') {
-    html += textProp('label', 'Label', node.label ?? '');
-    html += rangeProp('value', 'Value', (node.value ?? 0.5) * 100, 0, 100);
-  }
-  if (node.type === 'row_item') {
-    html += textProp('title', 'Title', node.title ?? '');
-    html += textProp('detail', 'Detail', node.detail ?? '');
-  }
-  html += rangeProp('width', 'Width', node.width ?? 488, 50, 600);
-  html += rangeProp('height', 'Height', node.height ?? 0, 0, 200);
-
-  html += `<div class="btn-row"><button id="propUpdateBtn">Update</button>
-    <button id="propResetBtn">Reset</button></div>`;
-
-  propsPanel.innerHTML = html;
-
-  document.getElementById('propUpdateBtn')?.addEventListener('click', () => {
-    const newProps = readProps();
-    updateNodeProp(r.path, newProps);
-  });
-  document.getElementById('propResetBtn')?.addEventListener('click', () => {
-    updatePropertyPanel(path); // reset to original
-  });
-}
-
-function readProps() {
-  const props = {};
-  const inputs = propsPanel.querySelectorAll('[data-prop]');
-  for (const el of inputs) {
-    const key = el.dataset.prop;
-    if (el.type === 'checkbox') {
-      props[key] = el.checked;
-    } else if (el.type === 'range') {
-      props[key] = parseFloat(el.value) / (el.dataset.div ?? 1);
-    } else if (el.tagName === 'SELECT') {
-      props[key] = parseInt(el.value);
-    } else {
-      props[key] = el.value;
-    }
-  }
-  return props;
-}
-
-function updateNodeProp(path, props) {
-  // Find node in treeConfig
-  const findNode = (children, pathStr) => {
-    const match = pathStr.match(/\[(\d+)\]/);
-    if (!match) return null;
-    const idx = parseInt(match[1]);
-    return children[idx];
-  };
-
-  const parts = path.split('[');
-  let children = treeConfig.children;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const idx = parseInt(parts[i + 1]?.replace(']', '') ?? '0');
-    if (children[idx]?.children) {
-      children = children[idx].children;
-    }
-  }
-
-  const lastPart = parts[parts.length - 1];
-  const idx = parseInt(lastPart?.replace(']', '') ?? '0');
-  const node = children[idx];
-  if (!node) return;
-
-  Object.assign(node, props);
-  if (node.type === 'slider' && props.value !== undefined) {
-    node.value = props.value;
-  }
-
-  buildAndRender();
-}
-
-// ── Prop helpers ────────────────────────────────────────────
-
-function textProp(key, label, value) {
-  return `<div class="prop-group"><label>${label}</label>
-    <input type="text" data-prop="${key}" value="${(value ?? '').replace(/"/g, '&quot;')}"></div>`;
-}
-
-function selectProp(key, label, value, options) {
-  let opts = options.map(([v, l]) =>
-    `<option value="${v}" ${v == value ? 'selected' : ''}>${l}</option>`).join('');
-  return `<div class="prop-group"><label>${label}</label>
-    <select data-prop="${key}">${opts}</select></div>`;
-}
-
-function toggleProp(key, label, value) {
-  return `<div class="prop-group"><label class="toggle">
-    <input type="checkbox" data-prop="${key}" ${value ? 'checked' : ''}>
-    ${label}</label></div>`;
-}
-
-function rangeProp(key, label, value, min, max) {
-  const div = key === 'value' ? 100 : 1;
-  return `<div class="prop-group"><label>${label}</label>
-    <div class="range-label"><span>${min}</span><span>${Math.round(value)}${key === 'value' ? '%' : 'px'}</span><span>${max}</span></div>
-    <input type="range" data-prop="${key}" data-div="${div}" min="${min}" max="${max}" value="${value}"></div>`;
-}
-
-// ── Build & Render pipeline ────────────────────────────────
-
-function buildAndRender() {
-  try {
-    zui.setTree(treeConfig);
-    lastResults = zui.renderAll(488, 440);
-
-    // Update metadata
-    let totalCmds = 0;
-    for (const r of lastResults) totalCmds += r.commandCount;
-    mSlots.textContent = lastResults.length;
-    mCmds.textContent = totalCmds;
-
-    renderToCanvas();
-    updateCommandList();
-    if (selectedPath) updatePropertyPanel(selectedPath);
-  } catch (err) {
-    console.error('Render error:', err);
-  }
-}
-
-// ── Slot detail / click handling ───────────────────────────
-
-function updateSlotDetail(path) {
-  const r = lastResults.find(r => r.path === path);
-  if (!r) {
-    slotDetail.innerHTML = '<div class="empty-state">Select component</div>';
-    return;
-  }
-
-  // Read real command stream from WASM for this slot
-  let cmds = [];
-  try {
-    cmds = zui.readSlotCommands(r.slot, r.bounds);
-  } catch (e) {
-    cmds = [];
-  }
-
-  let cmdHtml = '';
-  for (const c of cmds) {
-    const b = c.bounds || c.origin || {};
-    cmdHtml += `<div class="cmd-item"><span class="tag">${c.type}</span>
-      <span class="bounds">(${(b.x??0).toFixed(0)},${(b.y??0).toFixed(0)},${(b.w??0).toFixed(0)},${(b.h??0).toFixed(0)})</span></div>`;
-  }
-
-  slotDetail.innerHTML = `
-    <div class="meta-item"><div class="label">Path</div><div class="value pink">${r.path}</div></div>
-    <div class="meta-item"><div class="label">Type</div><div class="value">${r.type}</div></div>
-    <div class="meta-item"><div class="label">Slot</div><div class="value orange">${r.slot}</div></div>
-    <div class="meta-item"><div class="label">Commands</div><div class="value green">${r.commandCount}</div></div>
-    <div class="meta-item" style="grid-column:1/-1">
-      <div class="label">Bounds</div>
-      <div class="value">x:${r.bounds.x.toFixed(0)} y:${r.bounds.y.toFixed(0)} w:${r.bounds.w.toFixed(0)} h:${r.bounds.h.toFixed(0)}</div>
-    </div>
-    <div class="meta-item" style="grid-column:1/-1">
-      <div class="label">Commands (${cmds.length})</div>
-      <div class="cmd-list">${cmdHtml || '<span style="color:#666">none</span>'}</div>
-    </div>
-  `;
-}
-
-function updateCommandList() {
-  let totalCmds = 0;
-  let html = '';
-  for (const r of lastResults) {
-    totalCmds += r.commandCount;
-    html += `<div class="cmd-item">
-      <span class="tag">${r.type}</span>
-      <span class="bounds">s${r.slot} · ${r.commandCount}cmd</span></div>`;
-  }
-  cmdList.innerHTML = html || '<div class="empty-state">Render to see commands</div>';
-}
-
-// ── Canvas click → select slot ─────────────────────────────
-
-canvas.addEventListener('click', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const my = (e.clientY - rect.top) * scaleY;
-
-  // Find clicked component (reverse order for z-order)
-  let found = null;
-  for (const r of lastResults) {
-    const b = r.bounds;
-    const bx = b.x + 16, by = b.y + 36;
-    if (mx >= bx && mx <= bx + b.w && my >= by && my <= by + b.h) {
-      found = r;
-    }
-  }
-
-  if (found) {
-    selectedPath = found.path;
-    updatePropertyPanel(selectedPath);
-    updateSlotDetail(selectedPath);
-    renderToCanvas();
+    cmdListEl.innerHTML=ch;
+  }else{
+    if(slotInfoEl.querySelector('.stat')){drawCanvas();slotInfoEl.innerHTML='<div class="tip">Hover a component</div>';cmdListEl.innerHTML='<div class="tip">Hover a component</div>'}
   }
 });
 
-// ── FPS counter ─────────────────────────────────────────────
+// ── Stats ─────────────────────────────────────────────────
 
-function updateFps(time) {
-  frameCount++;
-  if (time - lastFpsTime >= 1000) {
-    const fps = Math.round(frameCount * 1000 / (time - lastFpsTime));
-    fpsEl.textContent = fps + ' fps';
-    mFps.textContent = fps;
-    frameCount = 0;
-    lastFpsTime = time;
+function updateStats(){
+  let totalCmds=0,slots=slotMap.length;
+  const typeCount={};
+  for(const e of slotMap){
+    totalCmds+=e.cmds.length;
+    typeCount[e.type]=(typeCount[e.type]??0)+1;
   }
-  animFrame = requestAnimationFrame(updateFps);
+  statsEl.innerHTML=`
+    <div class="stat"><div class="l">Components</div><div class="v">${slots}</div></div>
+    <div class="stat"><div class="l">Commands</div><div class="v">${totalCmds}</div></div>
+    <div class="stat"><div class="l">Types</div><div class="v">${Object.keys(typeCount).length}</div></div>
+    <div class="stat"><div class="l">Canvas</div><div class="v">${canvas.width}×${canvas.height}</div></div>
+    <div class="stat" style="grid-column:1/-1"><div class="l">Composition</div><div class="v">${Object.entries(typeCount).map(([k,v])=>`${k}:${v}`).join(' · ')}</div></div>`;
 }
 
-// ── Button handlers ─────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────
 
-btnAll.addEventListener('click', () => {
-  document.querySelectorAll('.component-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector('[data-id="all"]')?.classList.add('active');
-  loadShowcase('all');
-});
-
-btnClear.addEventListener('click', () => {
-  zui.setTree({ type: 'column', gap: 0, padding: 0, children: [] });
-  lastResults = [];
-  mSlots.textContent = '0';
-  mCmds.textContent = '0';
-  renderToCanvas();
-  cmdList.innerHTML = '<div class="empty-state">Cleared</div>';
-  propsPanel.innerHTML = '<div class="empty-state">Cleared</div>';
-  slotDetail.innerHTML = '<div class="empty-state">Cleared</div>';
-});
-
-// ── Init ───────────────────────────────────────────────────
-
-async function main() {
-  try {
-    zui = await init('../../dist/zui.wasm');
-    status.textContent = '✅ ZUI loaded';
-    status.classList.add('loaded');
-    status.classList.remove('loading');
-
-    // WASM size
-    mWasm.textContent = '600 KB';
-
-    buildComponentList();
-    buildAndRender();
-
-    animFrame = requestAnimationFrame(updateFps);
-  } catch (err) {
-    status.textContent = '❌ ' + err.message;
-    status.classList.add('error');
-    status.classList.remove('loading');
-    console.error(err);
-  }
+async function main(){
+  try{
+    zui=await init('../../dist/zui.wasm');
+    statusEl.textContent='✅ Ready';
+    buildTabs();
+    render();
+  }catch(e){statusEl.textContent='❌ Error';console.error(e)}
 }
-
 main();
 </script>
 </body>
